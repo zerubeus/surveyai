@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    env_file:
+      - ./worker/.env
+    environment:
+      - WORKER_ID=worker-docker-1
+      - POLL_INTERVAL=2
+    restart: unless-stopped
+    depends_on: []
+    # In production, Supabase runs as a managed service.
+    # Locally, use `supabase start` first, then `docker-compose up worker`.

@@ -1,0 +1,35 @@
+# SurveyAI Analyst — Python Worker Dependencies
+# Python 3.12+
+
+# Supabase client
+supabase>=2.10.0
+
+# AI/LLM
+anthropic>=0.39.0
+
+# Data processing
+pandas>=2.2.0
+openpyxl>=3.1.0
+
+# Statistics
+scipy>=1.14.0
+statsmodels>=0.14.0
+pingouin>=0.5.4
+
+# Report generation
+python-docx>=1.1.0
+WeasyPrint>=62.0
+python-pptx>=1.0.0
+
+# Schema validation
+pydantic>=2.10.0
+
+# Structured logging
+structlog>=24.4.0
+
+# Testing
+pytest>=8.3.0
+pytest-asyncio>=0.24.0
+
+# Utilities
+python-dotenv>=1.0.0
