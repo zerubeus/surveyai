@@ -180,6 +180,46 @@ class SupabaseDB:
         )
         return path
 
+    # ========================================================================
+    # CONVENIENCE ACCESSORS
+    # ========================================================================
+
+    def get_dataset(self, dataset_id: str) -> dict[str, Any] | None:
+        """Fetch a single dataset row by ID."""
+        rows = self.select("datasets", filters={"id": dataset_id})
+        return rows[0] if rows else None
+
+    def get_project(self, project_id: str) -> dict[str, Any] | None:
+        """Fetch a single project row by ID."""
+        rows = self.select("projects", filters={"id": project_id})
+        return rows[0] if rows else None
+
+    def insert_task(
+        self,
+        project_id: str,
+        task_type: str,
+        payload: dict[str, Any] | None = None,
+        dataset_id: str | None = None,
+        created_by: str = "worker",
+    ) -> str:
+        """
+        Insert a new task into the queue.
+
+        Returns: The new task's UUID.
+        """
+        data: dict[str, Any] = {
+            "project_id": project_id,
+            "task_type": task_type,
+            "payload": payload or {},
+            "created_by": created_by,
+        }
+        if dataset_id is not None:
+            data["payload"] = {**(payload or {}), "dataset_id": dataset_id}
+        row = self.insert("tasks", data)
+        task_id: str = row["id"]
+        logger.info("task_inserted", task_id=task_id, task_type=task_type)
+        return task_id
+
     def download_file(self, bucket: str, path: str) -> bytes:
         """Download a file from Supabase Storage."""
         return self.client.storage.from_(bucket).download(path)
