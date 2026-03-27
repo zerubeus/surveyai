@@ -16,6 +16,7 @@ import structlog
 from dotenv import load_dotenv
 
 from db import SupabaseDB
+from services.instrument_service import parse_instrument
 
 load_dotenv()
 
@@ -97,9 +98,11 @@ def handle_task(db: SupabaseDB, task_id: str, task_type: str, payload: dict) -> 
     2. Completing via db.complete_task() with results
     3. Raising exceptions on failure (caught by main loop)
     """
-    # Task handlers will be registered here in subsequent sprints:
-    # Sprint 4: Task queue infrastructure (this file)
-    # Sprint 5: parse_instrument
+    if task_type == "parse_instrument":
+        parse_instrument(db, task_id, payload)
+        return
+
+    # Future sprint handlers:
     # Sprint 6: detect_column_roles
     # Sprint 7: run_eda, run_consistency_checks, run_bias_detection
     # Sprint 8: generate_cleaning_suggestions

@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { DatasetWorkflow } from "@/components/datasets/DatasetWorkflow";
+import { InstrumentSection } from "@/components/instruments/InstrumentSection";
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
@@ -50,6 +51,16 @@ export default async function ProjectDetailPage({
 
   const currentDataset = datasets?.[0] ?? null;
 
+  // Fetch the most recent instrument for this project
+  const { data: instruments } = await supabase
+    .from("instruments")
+    .select("*")
+    .eq("project_id", project.id)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  const currentInstrument = instruments?.[0] ?? null;
+
   return (
     <div className="container py-10">
       <div className="flex items-center gap-4">
@@ -61,6 +72,13 @@ export default async function ProjectDetailPage({
       {project.description && (
         <p className="mt-4 text-muted-foreground">{project.description}</p>
       )}
+
+      <div className="mt-8">
+        <InstrumentSection
+          projectId={project.id}
+          instrument={currentInstrument}
+        />
+      </div>
 
       <div className="mt-8">
         <h2 className="mb-4 text-xl font-semibold">Dataset</h2>
