@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
+import { DatasetWorkflow } from "@/components/datasets/DatasetWorkflow";
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
@@ -38,6 +39,17 @@ export default async function ProjectDetailPage({
     notFound();
   }
 
+  // Fetch the current dataset for this project (most recent, is_current=true)
+  const { data: datasets } = await supabase
+    .from("datasets")
+    .select("*")
+    .eq("project_id", project.id)
+    .eq("is_current", true)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  const currentDataset = datasets?.[0] ?? null;
+
   return (
     <div className="container py-10">
       <div className="flex items-center gap-4">
@@ -49,8 +61,13 @@ export default async function ProjectDetailPage({
       {project.description && (
         <p className="mt-4 text-muted-foreground">{project.description}</p>
       )}
-      <div className="mt-8 rounded-lg border border-dashed p-8 text-center text-muted-foreground">
-        Project workflow steps will be available in upcoming sprints.
+
+      <div className="mt-8">
+        <h2 className="mb-4 text-xl font-semibold">Dataset</h2>
+        <DatasetWorkflow
+          initialDataset={currentDataset}
+          projectId={project.id}
+        />
       </div>
     </div>
   );
