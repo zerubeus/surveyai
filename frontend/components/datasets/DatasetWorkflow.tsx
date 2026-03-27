@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { useRouter } from "next/navigation";
 import { DatasetUploader } from "@/components/datasets/DatasetUploader";
 import { DatasetConfirmation } from "@/components/datasets/DatasetConfirmation";
 import { CheckCircle2 } from "lucide-react";
@@ -13,16 +12,15 @@ interface DatasetWorkflowProps {
 }
 
 export function DatasetWorkflow({ initialDataset, projectId }: DatasetWorkflowProps) {
-  const router = useRouter();
   const [dataset, setDataset] = useState<Tables<"datasets"> | null>(initialDataset);
 
   const handleUploadComplete = useCallback((uploaded: Tables<"datasets">) => {
     setDataset(uploaded);
   }, []);
 
-  const handleConfirm = useCallback(() => {
-    router.refresh();
-  }, [router]);
+  const handleConfirm = useCallback((confirmed: Tables<"datasets">) => {
+    setDataset(confirmed);
+  }, []);
 
   const handleCancel = useCallback(() => {
     setDataset(null);

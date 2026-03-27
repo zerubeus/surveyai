@@ -10,7 +10,7 @@ import type { Tables } from "@/lib/types/database";
 
 interface DatasetConfirmationProps {
   dataset: Tables<"datasets">;
-  onConfirm: () => void;
+  onConfirm: (confirmed: Tables<"datasets">) => void;
   onCancel: () => void;
 }
 
@@ -27,17 +27,19 @@ export function DatasetConfirmation({
     const supabase = createBrowserClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from("datasets")
       .update({
         status: "confirmed",
         confirmed_at: new Date().toISOString(),
         confirmed_by: user?.id ?? null,
       })
-      .eq("id", dataset.id);
+      .eq("id", dataset.id)
+      .select()
+      .single();
 
-    if (!error) {
-      onConfirm();
+    if (!error && updated) {
+      onConfirm(updated);
     }
     setConfirming(false);
   };
