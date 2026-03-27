@@ -137,7 +137,8 @@ export function ColumnRoleMapper({
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            {taskProgress.error ?? "Unknown error occurred"}
+            AI column detection failed. This is usually a temporary issue.
+            Click Retry to try again.
           </p>
           <Button variant="outline" onClick={handleRedetect}>
             Retry Detection

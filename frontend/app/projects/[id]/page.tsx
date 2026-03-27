@@ -1,8 +1,11 @@
 import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
 import { createServerClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DatasetWorkflow } from "@/components/datasets/DatasetWorkflow";
 import { InstrumentSection } from "@/components/instruments/InstrumentSection";
+import { ChevronLeft } from "lucide-react";
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
@@ -63,6 +66,16 @@ export default async function ProjectDetailPage({
 
   return (
     <div className="container py-10">
+      {/* Back navigation */}
+      <div className="mb-6">
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/dashboard">
+            <ChevronLeft className="mr-1 h-4 w-4" />
+            Back to Dashboard
+          </Link>
+        </Button>
+      </div>
+
       <div className="flex items-center gap-4">
         <h1 className="text-3xl font-bold">{project.name}</h1>
         <Badge variant="secondary">
