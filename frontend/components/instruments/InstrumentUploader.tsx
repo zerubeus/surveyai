@@ -183,6 +183,7 @@ export function InstrumentUploader({ projectId }: InstrumentUploaderProps) {
             "apikey",
             process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
           );
+          xhr.setRequestHeader("Content-Type", mimeType);
           xhr.setRequestHeader("x-upsert", "true");
           xhr.send(file);
         });

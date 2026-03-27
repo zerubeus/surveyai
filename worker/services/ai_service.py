@@ -16,36 +16,24 @@ from __future__ import annotations
 
 import os
 import json
-from functools import lru_cache
 from typing import Any
 
 import structlog
 import google.generativeai as genai
-from supabase import create_client, Client
 
 logger = structlog.get_logger()
 
 
-@lru_cache(maxsize=1)
-def _get_vault_secret(secret_name: str) -> str:
-    """
-    Fetch a secret from Supabase Vault using service_role key.
-    Cached after first call — never re-fetches unless process restarts.
-    Frontend/anon roles cannot access private.get_secret().
-    """
-    url = os.environ["SUPABASE_URL"]
-    key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-    client: Client = create_client(url, key)
-    result = client.rpc("private.get_secret", {"secret_name": secret_name}).execute()
-    if not result.data:
-        raise RuntimeError(f"Secret '{secret_name}' not found in Vault")
-    return result.data
-
-
 def _get_model() -> genai.GenerativeModel:
-    """Initialize Gemini client using key from Vault."""
-    api_key = _get_vault_secret("GEMINI_API_KEY")
-    model_name = _get_vault_secret("GEMINI_MODEL")
+    """
+    Initialize Gemini client.
+    The worker process reads the API key from its environment (worker/.env).
+    The key is loaded into the worker's environment at startup via python-dotenv.
+    It is never sent to the frontend — the worker runs server-side only.
+    The Supabase Vault copy provides a second source-of-truth for auditing.
+    """
+    api_key = os.environ["GEMINI_API_KEY"]
+    model_name = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview")
     genai.configure(api_key=api_key)
     return genai.GenerativeModel(model_name)
 
