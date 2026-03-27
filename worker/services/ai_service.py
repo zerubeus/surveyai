@@ -1,7 +1,7 @@
 """
 SurveyAI Analyst — AI Service
 
-Uses Google Gemini API (gemini-2.0-flash-lite) for all AI/LLM tasks:
+Uses Google Gemini API (gemini-3.1-flash-lite-preview) for all AI/LLM tasks:
 - Column role suggestion
 - Cleaning operation reasoning
 - Result interpretation
