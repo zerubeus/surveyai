@@ -106,6 +106,7 @@ export function DatasetUploader({ projectId, onUploadComplete }: DatasetUploader
 
         xhr.open("POST", `${supabaseUrl}/storage/v1/object/uploads/${storagePath}`);
         xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
+        xhr.setRequestHeader("apikey", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
         xhr.setRequestHeader("x-upsert", "true");
         xhr.send(file);
       });
