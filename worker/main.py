@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 
 from db import SupabaseDB
 from services.instrument_service import parse_instrument
+from services.column_role_service import detect_column_roles
 
 load_dotenv()
 
@@ -102,8 +103,11 @@ def handle_task(db: SupabaseDB, task_id: str, task_type: str, payload: dict) -> 
         parse_instrument(db, task_id, payload)
         return
 
+    if task_type == "detect_column_roles":
+        detect_column_roles(db, task_id, payload)
+        return
+
     # Future sprint handlers:
-    # Sprint 6: detect_column_roles
     # Sprint 7: run_eda, run_consistency_checks, run_bias_detection
     # Sprint 8: generate_cleaning_suggestions
     # Sprint 9: apply_cleaning_operation

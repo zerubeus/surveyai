@@ -85,6 +85,7 @@ export default async function ProjectDetailPage({
         <DatasetWorkflow
           initialDataset={currentDataset}
           projectId={project.id}
+          instrumentId={currentInstrument?.parse_status === "parsed" ? currentInstrument.id : null}
         />
       </div>
     </div>
