@@ -18,6 +18,10 @@ from dotenv import load_dotenv
 from db import SupabaseDB
 from services.instrument_service import parse_instrument
 from services.column_role_service import detect_column_roles
+from services.eda_service import run_eda
+from services.consistency_service import run_consistency_checks
+from services.bias_service import run_bias_detection
+from services.eda_interpreter import interpret_quality_results
 
 load_dotenv()
 
@@ -107,18 +111,97 @@ def handle_task(db: SupabaseDB, task_id: str, task_type: str, payload: dict) -> 
         detect_column_roles(db, task_id, payload)
         return
 
+    if task_type == "run_eda":
+        run_eda(db, task_id, payload)
+        return
+
+    if task_type == "run_consistency_checks":
+        run_consistency_checks(db, task_id, payload)
+        return
+
+    if task_type == "run_bias_detection":
+        run_bias_detection(db, task_id, payload)
+        return
+
+    if task_type == "interpret_results":
+        _handle_interpret_results(db, task_id, payload)
+        return
+
     # Future sprint handlers:
-    # Sprint 7: run_eda, run_consistency_checks, run_bias_detection
     # Sprint 8: generate_cleaning_suggestions
     # Sprint 9: apply_cleaning_operation
     # Sprint 11-12: run_analysis
-    # Sprint 13: interpret_results
     # Sprint 14: generate_report_section
     # Sprint 15: generate_chart
     # Sprint 16: export_report, export_audit_trail
 
     logger.warning("unhandled_task_type", task_type=task_type, task_id=task_id)
     db.complete_task(task_id, {"message": f"Task type '{task_type}' not yet implemented"})
+
+
+def _handle_interpret_results(db: SupabaseDB, task_id: str, payload: dict) -> None:
+    """
+    Load all EDA results, bias flags, and consistency issues for a dataset,
+    then call the AI interpreter. Store interpretation in eda_results.
+    """
+    import json
+
+    dataset_id: str = payload["dataset_id"]
+    project_id: str = payload["project_id"]
+
+    db.update_task_progress(task_id, 10, "Loading EDA results...")
+
+    # Load all results for this dataset
+    all_results = db.select("eda_results", filters={"dataset_id": dataset_id})
+
+    eda_results = [r for r in all_results if r.get("result_type") in ("column_profile", "dataset_summary")]
+    bias_flags = [r for r in all_results if r.get("result_type") == "bias_check"]
+    consistency_issues = [r for r in all_results if r.get("result_type") == "consistency_check"]
+
+    # Load project context
+    db.update_task_progress(task_id, 20, "Loading project context...")
+    project = db.get_project(project_id)
+    project_context = {
+        "research_questions": project.get("research_questions") if project else None,
+        "sampling_method": project.get("sampling_method") if project else None,
+        "target_population": project.get("target_population") if project else None,
+    }
+
+    # Dataset metadata
+    dataset = db.get_dataset(dataset_id)
+    dataset_meta = {
+        "row_count": dataset.get("row_count") if dataset else None,
+        "column_count": dataset.get("column_count") if dataset else None,
+        "file_name": dataset.get("name") if dataset else None,
+    }
+
+    db.update_task_progress(task_id, 30, "Calling AI interpreter...")
+
+    interpretation = interpret_quality_results(
+        eda_results=eda_results,
+        bias_flags=bias_flags,
+        consistency_issues=consistency_issues,
+        project_context=project_context,
+        dataset_meta=dataset_meta,
+    )
+
+    db.update_task_progress(task_id, 80, "Storing interpretation...")
+
+    # Store interpretation as its own eda_results row
+    db.insert("eda_results", {
+        "dataset_id": dataset_id,
+        "column_name": None,
+        "result_type": "interpretation",
+        "profile": None,
+        "quality_score": interpretation.get("overall_quality_score"),
+        "issues": [],
+        "interpretation": json.loads(json.dumps(interpretation, default=str)),
+    })
+
+    db.complete_task(task_id, {
+        "message": "AI interpretation complete",
+        "overall_quality_score": interpretation.get("overall_quality_score"),
+    })
 
 
 if __name__ == "__main__":

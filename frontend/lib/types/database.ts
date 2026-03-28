@@ -389,9 +389,12 @@ export type Database = {
           dataset_id: string;
           column_name: string | null;
           result_type: string;
+          column_role: Database["public"]["Enums"]["column_role"] | null;
+          data_type: Database["public"]["Enums"]["column_data_type"] | null;
           profile: Json | null;
           quality_score: number | null;
           issues: Json;
+          interpretation: Json | null;
           bias_type: Database["public"]["Enums"]["bias_type"] | null;
           bias_severity: Database["public"]["Enums"]["severity_level"] | null;
           bias_evidence: Json | null;
@@ -403,9 +406,12 @@ export type Database = {
           dataset_id: string;
           column_name?: string | null;
           result_type: string;
+          column_role?: Database["public"]["Enums"]["column_role"] | null;
+          data_type?: Database["public"]["Enums"]["column_data_type"] | null;
           profile?: Json | null;
           quality_score?: number | null;
           issues?: Json;
+          interpretation?: Json | null;
           bias_type?: Database["public"]["Enums"]["bias_type"] | null;
           bias_severity?: Database["public"]["Enums"]["severity_level"] | null;
           bias_evidence?: Json | null;
@@ -417,9 +423,12 @@ export type Database = {
           dataset_id?: string;
           column_name?: string | null;
           result_type?: string;
+          column_role?: Database["public"]["Enums"]["column_role"] | null;
+          data_type?: Database["public"]["Enums"]["column_data_type"] | null;
           profile?: Json | null;
           quality_score?: number | null;
           issues?: Json;
+          interpretation?: Json | null;
           bias_type?: Database["public"]["Enums"]["bias_type"] | null;
           bias_severity?: Database["public"]["Enums"]["severity_level"] | null;
           bias_evidence?: Json | null;
