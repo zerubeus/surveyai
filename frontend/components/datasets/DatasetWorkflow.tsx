@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/browser";
 import { DatasetUploader } from "@/components/datasets/DatasetUploader";
 import { DatasetConfirmation } from "@/components/datasets/DatasetConfirmation";
@@ -18,6 +18,7 @@ interface DatasetWorkflowProps {
 }
 
 export function DatasetWorkflow({ initialDataset, projectId, instrumentId, hasColumnMappings = false }: DatasetWorkflowProps) {
+  const router = useRouter();
   const [dataset, setDataset] = useState<Tables<"datasets"> | null>(initialDataset);
   // rolesConfirmed persists across refreshes if mappings already exist in DB
   const [rolesConfirmed, setRolesConfirmed] = useState(hasColumnMappings);
@@ -111,11 +112,9 @@ export function DatasetWorkflow({ initialDataset, projectId, instrumentId, hasCo
                 Ready to analyse data quality — detect issues, inconsistencies, and potential biases.
               </p>
             </div>
-            <Button asChild>
-              <Link href={`/projects/${projectId}/quality`}>
-                <BarChart2 className="mr-2 h-4 w-4" />
-                Analyse Data Quality
-              </Link>
+            <Button onClick={() => router.push(`/projects/${projectId}/quality`)}>
+              <BarChart2 className="mr-2 h-4 w-4" />
+              Analyse Data Quality
             </Button>
           </div>
         </div>
