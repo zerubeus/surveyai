@@ -158,7 +158,8 @@ export function ColumnRoleMapper({
     );
   }
 
-  if (isLoading) {
+  // Show spinner while loading OR while we just dispatched and waiting for worker
+  if (isLoading || (taskId !== null && taskProgress.status === "completed" && mappings.length === 0)) {
     return (
       <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
