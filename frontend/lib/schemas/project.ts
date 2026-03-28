@@ -38,6 +38,53 @@ export const INSTRUMENT_LANGUAGES = [
   { value: "sw", label: "Swahili" },
 ] as const;
 
+/** Research question templates by study type — shown as one-click suggestions in Step 1 */
+export const RQ_TEMPLATES: Record<string, { label: string; questions: string[] }[]> = {
+  "Baseline": [
+    { label: "Outcome baseline", questions: [
+      "What is the current level of [outcome indicator] among [target population]?",
+      "What demographic and socio-economic factors are associated with [outcome indicator]?",
+    ]},
+    { label: "Barriers & enablers", questions: [
+      "What are the main barriers to [service/behaviour] access among [target population]?",
+      "How do gender and education level relate to barriers to [service/behaviour]?",
+    ]},
+  ],
+  "Endline": [
+    { label: "Change over time", questions: [
+      "To what extent did [outcome indicator] change between baseline and endline among [target population]?",
+      "Which sub-groups showed the greatest improvement in [outcome indicator]?",
+    ]},
+    { label: "Attribution", questions: [
+      "Is there a significant difference in [outcome indicator] between intervention and control groups?",
+      "What factors moderate the relationship between programme exposure and [outcome indicator]?",
+    ]},
+  ],
+  "Needs Assessment": [
+    { label: "Priority needs", questions: [
+      "What are the most significant unmet needs reported by [target population]?",
+      "How do priority needs differ by geographic area, gender, or household type?",
+    ]},
+    { label: "Vulnerability", questions: [
+      "Which demographic groups are most vulnerable based on [vulnerability indicators]?",
+      "What is the relationship between [livelihood indicator] and [vulnerability indicator]?",
+    ]},
+  ],
+  "KAP Study": [
+    { label: "KAP associations", questions: [
+      "What is the level of knowledge about [topic] among [target population]?",
+      "To what extent does knowledge about [topic] predict reported practices?",
+      "What factors are associated with positive attitudes towards [behaviour]?",
+    ]},
+  ],
+  "Satisfaction Survey": [
+    { label: "Service satisfaction", questions: [
+      "What is the overall satisfaction level with [service] among beneficiaries?",
+      "Which service dimensions (quality, timeliness, accessibility) most predict overall satisfaction?",
+    ]},
+  ],
+};
+
 export const projectSchema = z.object({
   name: z
     .string()

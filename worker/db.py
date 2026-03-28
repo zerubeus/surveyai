@@ -235,3 +235,25 @@ class SupabaseDB:
         """
         result = self.client.storage.from_(bucket).create_signed_url(path, expires_in)
         return result["signedURL"]
+
+    def audit(
+        self,
+        action: str,
+        resource_type: str,
+        resource_id: str | None = None,
+        project_id: str | None = None,
+        user_id: str | None = None,
+        metadata: dict | None = None,
+    ) -> None:
+        """Write an entry to the audit_log table (best-effort, never raises)."""
+        try:
+            self.insert("audit_log", {
+                "action": action,
+                "resource_type": resource_type,
+                "resource_id": resource_id,
+                "project_id": project_id,
+                "user_id": user_id,
+                "metadata": metadata or {},
+            })
+        except Exception as e:
+            logger.warning("audit_log_failed", error=str(e), action=action)

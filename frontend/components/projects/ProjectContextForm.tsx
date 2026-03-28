@@ -21,6 +21,7 @@ import {
   SAMPLING_METHODS,
   REPORT_AUDIENCES,
   INSTRUMENT_LANGUAGES,
+  RQ_TEMPLATES,
   type ProjectFormData,
 } from "@/lib/schemas/project";
 
@@ -235,6 +236,32 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
           <CardTitle className="text-lg">Research Questions</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* RQ templates — shown when at least one objective tag matches */}
+          {form.objective_tags.length > 0 && (() => {
+            const templates = form.objective_tags.flatMap(tag => RQ_TEMPLATES[tag] ?? []);
+            if (templates.length === 0) return null;
+            return (
+              <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3">
+                <p className="mb-2 text-xs font-medium text-blue-800">💡 Research question templates — click to use</p>
+                <div className="flex flex-wrap gap-2">
+                  {templates.map((t, ti) => (
+                    <button
+                      key={ti}
+                      type="button"
+                      onClick={() => {
+                        const newQuestions = t.questions.map((text, j) => ({ text, priority: j + 1 }));
+                        updateField("research_questions", newQuestions);
+                      }}
+                      className="rounded-full border border-blue-300 bg-white px-2.5 py-1 text-xs text-blue-700 hover:bg-blue-100 transition-colors"
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
           {form.research_questions.map((q, i) => (
             <div key={i} className="flex items-start gap-2">
               <span className="mt-2.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">

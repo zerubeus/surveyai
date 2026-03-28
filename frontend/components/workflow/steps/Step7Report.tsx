@@ -228,14 +228,19 @@ export function Step7Report({
 
     let cancelled = false;
 
-    (async () => {
+    const fetchSignedUrl = async () => {
+      if (cancelled) return;
       const { data } = await supabase.storage
         .from("reports")
-        .createSignedUrl(latestExport.file_path!, 3600);
+        .createSignedUrl(latestExport.file_path!, 604800); // 7 day URL
       if (!cancelled && data?.signedUrl) {
         setDownloadUrl(data.signedUrl);
       }
-    })();
+    };
+
+    fetchSignedUrl();
+    // Refresh URL every 6 days to ensure it never expires while the user has the page open
+    const refreshInterval = setInterval(fetchSignedUrl, 6 * 24 * 60 * 60 * 1000);
 
     if (latestExport.expires_at) {
       const update = () => {
@@ -257,6 +262,7 @@ export function Step7Report({
 
     return () => {
       cancelled = true;
+      clearInterval(refreshInterval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestExport]);

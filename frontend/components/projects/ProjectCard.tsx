@@ -25,6 +25,7 @@ const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secon
 interface ProjectCardProps {
   project: Tables<"projects">;
   onDeleted?: (id: string) => void;
+  qualityScore?: number | null;
 }
 
 function parseDescription(raw: string | null): { text: string | null; tags: string[] } {
@@ -50,7 +51,7 @@ function countCompletedSteps(pipelineStatus: unknown): number {
   ).length;
 }
 
-export function ProjectCard({ project, onDeleted }: ProjectCardProps) {
+export function ProjectCard({ project, onDeleted, qualityScore }: ProjectCardProps) {
   const router = useRouter();
   const supabase = createBrowserClient();
   const [showMenu, setShowMenu] = useState(false);
@@ -87,7 +88,20 @@ export function ProjectCard({ project, onDeleted }: ProjectCardProps) {
         <Card className="transition-colors hover:border-primary/50">
           <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
             <CardTitle className="text-lg font-semibold pr-8">{project.name?.trim()}</CardTitle>
-            <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
+            <div className="flex items-center gap-1.5">
+              {qualityScore !== null && qualityScore !== undefined && (
+                <span
+                  title={`Data quality: ${qualityScore.toFixed(1)}/100`}
+                  className={`text-xs font-medium ${
+                    qualityScore >= 80 ? "text-emerald-600" :
+                    qualityScore >= 60 ? "text-yellow-600" : "text-red-500"
+                  }`}
+                >
+                  {qualityScore >= 80 ? "🟢" : qualityScore >= 60 ? "🟡" : "🔴"} {qualityScore.toFixed(0)}
+                </span>
+              )}
+              <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
+            </div>
           </CardHeader>
           <CardContent>
             {descText && (

@@ -25,6 +25,43 @@ export default async function DashboardPage() {
     .order("created_at", { ascending: false });
   const projects = projectsRaw as Project[] | null;
 
+  // Fetch quality scores for projects that have completed EDA
+  // @ts-ignore — supabase select type inference
+  const { data: qualityRaw } = await supabase
+    .from("eda_results")
+    .select("dataset_id, quality_score")
+    .eq("result_type", "dataset_summary")
+    .in(
+      "dataset_id",
+      // Get dataset IDs for these projects
+      (projects ?? []).map((p) => p.id), // will be overridden below
+    );
+  // Actually join through datasets
+  // @ts-ignore — supabase select type inference
+  const { data: datasetsRaw } = await supabase
+    .from("datasets")
+    .select("id, project_id")
+    .in("project_id", (projects ?? []).map((p) => p.id));
+  const datasets = datasetsRaw as Array<{ id: string; project_id: string }> | null;
+
+  // @ts-ignore — supabase select type inference
+  const { data: edaRaw } = await supabase
+    .from("eda_results")
+    .select("dataset_id, quality_score")
+    .eq("result_type", "dataset_summary")
+    .in("dataset_id", (datasets ?? []).map((d) => d.id));
+  const edaResults = edaRaw as Array<{ dataset_id: string; quality_score: number | null }> | null;
+
+  // Build projectId → quality_score map
+  const datasetToProject: Record<string, string> = {};
+  for (const d of datasets ?? []) datasetToProject[d.id] = d.project_id;
+  const projectQuality: Record<string, number> = {};
+  for (const e of edaResults ?? []) {
+    if (e.quality_score !== null && datasetToProject[e.dataset_id]) {
+      projectQuality[datasetToProject[e.dataset_id]] = e.quality_score;
+    }
+  }
+
   return (
     <div className="container py-10">
       <div className="flex items-center justify-between">
@@ -120,7 +157,7 @@ export default async function DashboardPage() {
       ) : (
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {projects.map((project) => (
-            <ProjectCard key={project.id} project={project} />
+            <ProjectCard key={project.id} project={project} qualityScore={projectQuality[project.id] ?? null} />
           ))}
         </div>
       )}

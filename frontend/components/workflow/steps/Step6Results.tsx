@@ -797,7 +797,52 @@ function ResultCard({
           <span className="text-muted-foreground">n = </span>
           <span className="font-mono">{result.sample_size}</span>
         </div>
+        {/* Confidence interval */}
+        {result.confidence_interval && (() => {
+          const ci = result.confidence_interval as Record<string, number | string> | null;
+          if (!ci) return null;
+          const lower = typeof ci.lower === 'number' ? ci.lower.toFixed(3) : '?';
+          const upper = typeof ci.upper === 'number' ? ci.upper.toFixed(3) : '?';
+          const metric = ci.metric as string || '';
+          return (
+            <div title={`95% CI for ${metric}`}>
+              <span className="text-muted-foreground">95% CI: </span>
+              <span className="font-mono text-xs">[{lower}, {upper}]</span>
+            </div>
+          );
+        })()}
       </div>
+
+      {/* Assumption warnings */}
+      {result.raw_output && (() => {
+        const raw = result.raw_output as Record<string, unknown> | null;
+        const assump = raw?.assumptions_checked as Record<string, unknown> | null;
+        if (!assump) return null;
+        const warnings: string[] = [];
+        if (assump.normality_passed === false) warnings.push("Normality assumption violated — consider non-parametric test");
+        if (assump.equal_variance_passed === false) warnings.push("Unequal variances detected (Levene p < 0.05) — Welch correction applied");
+        if (assump.homogeneity_passed === false) warnings.push("Heterogeneity of variance (Levene p < 0.05) — interpret F-statistic cautiously");
+        if (typeof assump.low_expected_cells_pct === 'number' && assump.low_expected_cells_pct > 0.2) warnings.push(`${Math.round((assump.low_expected_cells_pct as number) * 100)}% of expected cells < 5 — χ² may be unreliable`);
+        if (warnings.length === 0) return null;
+        return (
+          <div className="space-y-1">
+            {warnings.map((w, i) => (
+              <div key={i} className="flex items-start gap-1.5 text-xs text-yellow-700">
+                <span className="mt-0.5 flex-shrink-0">⚠</span>
+                <span>{w}</span>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* Missing data warning */}
+      {typeof result.missing_data_rate === 'number' && result.missing_data_rate > 0.15 && (
+        <div className="flex items-start gap-1.5 text-xs text-orange-700">
+          <span className="mt-0.5 flex-shrink-0">⚠</span>
+          <span>{Math.round(result.missing_data_rate * 100)}% missing data on outcome — interpret with caution</span>
+        </div>
+      )}
 
       {/* Chart */}
       {chartUrl && (

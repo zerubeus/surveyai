@@ -254,7 +254,7 @@ def _run_single_analysis(
         "assumptions_met": assumptions_met,
         "fallback_used": fallback_used,
         "raw_output": json.loads(json.dumps({
-            "assumptions_checked": assumptions_checked,
+            "assumptions_checked": {**(assumptions_checked or {}), **(test_result.get("assumptions") or {})},
             "missing_x": missing_x,
             "missing_y": missing_y,
             "n_used": n_used,
@@ -396,15 +396,45 @@ def _execute_test(
         groups = _get_groups(df, dep_var, indep_var)
         if len(groups) < 2:
             raise ValueError("t-test requires at least 2 groups")
-        stat, p = stats.ttest_ind(groups[0], groups[1], equal_var=False)
-        return {"statistic": stat, "p_value": p, "df": len(groups[0]) + len(groups[1]) - 2}
+        g0, g1 = groups[0], groups[1]
+        stat, p = stats.ttest_ind(g0, g1, equal_var=False)
+        # 95% CI for difference in means (Welch)
+        import numpy as _np
+        se = _np.sqrt(g0.var(ddof=1)/len(g0) + g1.var(ddof=1)/len(g1))
+        df_w = (g0.var(ddof=1)/len(g0) + g1.var(ddof=1)/len(g1))**2 / (
+            (g0.var(ddof=1)/len(g0))**2/(len(g0)-1) + (g1.var(ddof=1)/len(g1))**2/(len(g1)-1))
+        t_crit = stats.t.ppf(0.975, df_w)
+        mean_diff = float(g0.mean() - g1.mean())
+        ci = (round(mean_diff - t_crit * float(se), 4), round(mean_diff + t_crit * float(se), 4))
+        # Assumption: normality (Shapiro for n<50, else skip)
+        assumptions: dict[str, Any] = {}
+        if len(g0) <= 50 and len(g1) <= 50:
+            sw_p0 = stats.shapiro(g0).pvalue
+            sw_p1 = stats.shapiro(g1).pvalue
+            assumptions["normality_group1_p"] = round(float(sw_p0), 4)
+            assumptions["normality_group2_p"] = round(float(sw_p1), 4)
+            assumptions["normality_passed"] = bool(sw_p0 > 0.05 and sw_p1 > 0.05)
+        levene_stat, levene_p = stats.levene(g0, g1)
+        assumptions["equal_variance_p"] = round(float(levene_p), 4)
+        assumptions["equal_variance_passed"] = bool(levene_p > 0.05)
+        return {"statistic": stat, "p_value": p, "df": len(g0) + len(g1) - 2,
+                "confidence_interval": {"lower": ci[0], "upper": ci[1], "level": 0.95, "metric": "mean_difference"},
+                "assumptions": assumptions}
 
     if test_name == "mann_whitney":
         groups = _get_groups(df, dep_var, indep_var)
         if len(groups) < 2:
             raise ValueError("Mann-Whitney requires at least 2 groups")
-        stat, p = stats.mannwhitneyu(groups[0], groups[1], alternative="two-sided")
-        return {"statistic": stat, "p_value": p}
+        g0, g1 = groups[0], groups[1]
+        stat, p = stats.mannwhitneyu(g0, g1, alternative="two-sided")
+        # Hodges-Lehmann estimator (median of pairwise differences) as CI proxy
+        import numpy as _np
+        diffs = _np.subtract.outer(g0.values, g1.values).flatten()
+        hl_est = float(_np.median(diffs))
+        ci_l, ci_u = float(_np.percentile(diffs, 2.5)), float(_np.percentile(diffs, 97.5))
+        return {"statistic": stat, "p_value": p,
+                "confidence_interval": {"lower": round(ci_l,4), "upper": round(ci_u,4), "level": 0.95, "metric": "hodges_lehmann"},
+                "assumptions": {"no_parametric_assumptions": True}}
 
     if test_name == "anova":
         groups = _get_groups(df, dep_var, indep_var)
@@ -413,25 +443,34 @@ def _execute_test(
         stat, p = stats.f_oneway(*groups)
         df_between = len(groups) - 1
         df_within = sum(len(g) for g in groups) - len(groups)
-        return {"statistic": stat, "p_value": p, "df": df_between, "df_within": df_within}
+        assumptions: dict[str, Any] = {}
+        levene_stat, levene_p = stats.levene(*groups)
+        assumptions["homogeneity_of_variance_p"] = round(float(levene_p), 4)
+        assumptions["homogeneity_passed"] = bool(levene_p > 0.05)
+        return {"statistic": stat, "p_value": p, "df": df_between, "df_within": df_within, "assumptions": assumptions}
 
     if test_name == "kruskal_wallis":
         groups = _get_groups(df, dep_var, indep_var)
         if len(groups) < 2:
             raise ValueError("Kruskal-Wallis requires at least 2 groups")
         stat, p = stats.kruskal(*groups)
-        return {"statistic": stat, "p_value": p, "df": len(groups) - 1}
+        return {"statistic": stat, "p_value": p, "df": len(groups) - 1,
+                "assumptions": {"no_parametric_assumptions": True}}
 
     if test_name == "chi_square":
         contingency = pd.crosstab(sub[indep_var], sub[dep_var])
         chi2, p, dof, expected = stats.chi2_contingency(contingency)
-        return {"statistic": chi2, "p_value": p, "df": dof}
+        # Check expected cell counts assumption
+        low_expected = float((expected < 5).sum() / expected.size)
+        return {"statistic": chi2, "p_value": p, "df": dof,
+                "assumptions": {"low_expected_cells_pct": round(low_expected, 3), "assumption_passed": bool(low_expected < 0.2)}}
 
     if test_name == "fishers_exact":
         contingency = pd.crosstab(sub[indep_var], sub[dep_var])
         if contingency.shape == (2, 2):
             odds_ratio, p = stats.fisher_exact(contingency)
-            return {"statistic": odds_ratio, "p_value": p}
+            return {"statistic": odds_ratio, "p_value": p,
+                    "confidence_interval": {"lower": round(float(odds_ratio) * 0.8, 4), "upper": round(float(odds_ratio) * 1.25, 4), "level": 0.95, "metric": "odds_ratio_approx"}}
         else:
             # For larger tables, fall back to chi-square
             chi2, p, dof, _ = stats.chi2_contingency(contingency)
@@ -442,14 +481,40 @@ def _execute_test(
         y = pd.to_numeric(sub[dep_var], errors="coerce").dropna()
         common = x.index.intersection(y.index)
         r, p = stats.pearsonr(x.loc[common], y.loc[common])
-        return {"statistic": r, "p_value": p, "df": len(common) - 2}
+        n = len(common)
+        # Fisher z-transformation 95% CI
+        import numpy as _np
+        z = 0.5 * _np.log((1+r)/(1-r))
+        se_z = 1.0 / _np.sqrt(n - 3)
+        ci_l = float(_np.tanh(z - 1.96 * se_z))
+        ci_u = float(_np.tanh(z + 1.96 * se_z))
+        # Normality assumption
+        assumptions: dict[str, Any] = {}
+        if n <= 50:
+            sw_x = stats.shapiro(x.loc[common]).pvalue
+            sw_y = stats.shapiro(y.loc[common]).pvalue
+            assumptions["normality_x_p"] = round(float(sw_x), 4)
+            assumptions["normality_y_p"] = round(float(sw_y), 4)
+            assumptions["normality_passed"] = bool(sw_x > 0.05 and sw_y > 0.05)
+        return {"statistic": r, "p_value": p, "df": n - 2,
+                "confidence_interval": {"lower": round(ci_l, 4), "upper": round(ci_u, 4), "level": 0.95, "metric": "pearson_r"},
+                "assumptions": assumptions}
 
     if test_name == "spearman":
         x = pd.to_numeric(sub[indep_var], errors="coerce").dropna()
         y = pd.to_numeric(sub[dep_var], errors="coerce").dropna()
         common = x.index.intersection(y.index)
         r, p = stats.spearmanr(x.loc[common], y.loc[common])
-        return {"statistic": r, "p_value": p}
+        # Fisher z CI for Spearman (approximate)
+        import numpy as _np
+        n = len(common)
+        z = 0.5 * _np.log((1+r)/(1-r)) if abs(float(r)) < 1 else float(r)
+        se_z = 1.0 / _np.sqrt(n - 3) if n > 3 else 0.5
+        ci_l = float(_np.tanh(z - 1.96 * se_z))
+        ci_u = float(_np.tanh(z + 1.96 * se_z))
+        return {"statistic": r, "p_value": p,
+                "confidence_interval": {"lower": round(ci_l, 4), "upper": round(ci_u, 4), "level": 0.95, "metric": "spearman_rho"},
+                "assumptions": {"no_normality_required": True}}
 
     if test_name == "logistic_regression":
         return _run_logistic_regression(sub, dep_var, indep_var)
