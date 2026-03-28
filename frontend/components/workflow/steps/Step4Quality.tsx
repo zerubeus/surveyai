@@ -491,7 +491,7 @@ function QualityOverviewTab({
           <div className="flex items-center gap-6">
             <div className="text-center">
               <p className={`text-5xl font-bold ${scoreColor(overallQuality)}`}>
-                {Math.round(overallQuality)}
+                {overallQuality.toFixed(1)}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">out of 100</p>
             </div>
@@ -531,9 +531,9 @@ function QualityOverviewTab({
           <SummaryCard
             icon={<AlertTriangle className="h-5 w-5 text-yellow-500" />}
             label="Warnings"
-            value={String(summary.warning_count ?? 0)}
+            value={String((summary.warning_count as number ?? 0) + biasFlags.length)}
             color={
-              (summary.warning_count as number) > 0 ? "text-yellow-600" : ""
+              ((summary.warning_count as number ?? 0) + biasFlags.length) > 0 ? "text-yellow-600" : ""
             }
           />
         </div>

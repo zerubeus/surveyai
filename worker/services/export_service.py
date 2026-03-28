@@ -66,8 +66,8 @@ def export_report(db: SupabaseDB, task_id: str, payload: dict[str, Any]) -> None
         docx_path = f"{created_by}/{report['project_id']}/report_{report_id}.docx"
 
         db.upload_file("reports", docx_path, docx_bytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-        signed_url = db.get_signed_url("reports", docx_path, expires_in=3600)
-        expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+        signed_url = db.get_signed_url("reports", docx_path, expires_in=604800)
+        expires_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
 
         export_record = db.insert("report_exports", {
             "report_id": report_id,
@@ -92,8 +92,8 @@ def export_report(db: SupabaseDB, task_id: str, payload: dict[str, Any]) -> None
         pdf_path = f"{created_by}/{report['project_id']}/report_{report_id}.pdf"
 
         db.upload_file("reports", pdf_path, pdf_bytes, "application/pdf")
-        signed_url = db.get_signed_url("reports", pdf_path, expires_in=3600)
-        expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+        signed_url = db.get_signed_url("reports", pdf_path, expires_in=604800)
+        expires_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
 
         export_record = db.insert("report_exports", {
             "report_id": report_id,

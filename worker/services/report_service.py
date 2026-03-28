@@ -46,29 +46,33 @@ TEMPLATE_SECTIONS: dict[str, list[dict[str, Any]]] = {
         {"key": "executive_summary", "title": "Executive Summary", "order": 1},
         {"key": "methodology", "title": "Methodology", "order": 2},
         {"key": "results", "title": "Key Findings", "order": 3},
-        {"key": "discussion", "title": "Discussion", "order": 4},
-        {"key": "recommendations", "title": "Recommendations", "order": 5},
+        {"key": "rq_synthesis", "title": "Evidence Per Research Question", "order": 4},
+        {"key": "discussion", "title": "Discussion", "order": 5},
+        {"key": "recommendations", "title": "Recommendations", "order": 6},
     ],
     "internal": [
         {"key": "executive_summary", "title": "Executive Summary", "order": 1},
         {"key": "methodology", "title": "Methodology & Technical Details", "order": 2},
         {"key": "results", "title": "Statistical Results", "order": 3},
-        {"key": "discussion", "title": "Discussion & Implications", "order": 4},
-        {"key": "recommendations", "title": "Recommendations", "order": 5},
+        {"key": "rq_synthesis", "title": "Evidence Per Research Question", "order": 4},
+        {"key": "discussion", "title": "Discussion & Implications", "order": 5},
+        {"key": "recommendations", "title": "Recommendations", "order": 6},
     ],
     "academic": [
         {"key": "executive_summary", "title": "Abstract", "order": 1},
         {"key": "methodology", "title": "Methods", "order": 2},
         {"key": "results", "title": "Results", "order": 3},
-        {"key": "discussion", "title": "Discussion", "order": 4},
-        {"key": "limitations", "title": "Limitations", "order": 5},
+        {"key": "rq_synthesis", "title": "Evidence Per Research Question", "order": 4},
+        {"key": "discussion", "title": "Discussion", "order": 5},
+        {"key": "limitations", "title": "Limitations", "order": 6},
     ],
     "policy": [
         {"key": "recommendations", "title": "Recommendations", "order": 1},
         {"key": "executive_summary", "title": "Executive Summary", "order": 2},
         {"key": "results", "title": "Key Findings", "order": 3},
-        {"key": "methodology", "title": "Methodology", "order": 4},
-        {"key": "discussion", "title": "Discussion", "order": 5},
+        {"key": "rq_synthesis", "title": "Evidence Per Research Question", "order": 4},
+        {"key": "methodology", "title": "Methodology", "order": 5},
+        {"key": "discussion", "title": "Discussion", "order": 6},
     ],
 }
 
@@ -175,6 +179,14 @@ def generate_report(db: SupabaseDB, task_id: str, payload: dict[str, Any]) -> No
 
         if confidence == "low":
             content = _generate_placeholder(section_key, section["title"])
+        elif section_key == "rq_synthesis":
+            content = _draft_rq_synthesis(
+                project_context=project_context,
+                analysis_results=analysis_results,
+                study_design=study_design,
+                is_experimental=is_experimental,
+                template=template,
+            )
         else:
             content = _draft_section(
                 section_key=section_key,
@@ -334,6 +346,11 @@ def _determine_confidence(
     if section_key == "executive_summary":
         return "medium"
 
+    if section_key == "rq_synthesis":
+        # HIGH confidence if we have completed analysis results with p-values
+        has_results = any(r.get("p_value") is not None for r in analysis_results)
+        return "high" if has_results else "medium"
+
     return "medium"
 
 
@@ -416,6 +433,100 @@ Return a JSON object with:
             f"AI drafting failed for this section. Error: {e}\n\n"
             f"Please write this section manually."
         )
+
+
+def _draft_rq_synthesis(
+    project_context: dict[str, Any],
+    analysis_results: list[dict[str, Any]],
+    study_design: str,
+    is_experimental: bool,
+    template: str,
+) -> str:
+    """Generate a per-RQ synthesis narrative: one holistic paragraph per research question."""
+    # Group results by research question
+    from collections import defaultdict
+    rq_groups: dict[str, list[dict]] = defaultdict(list)
+    for r in analysis_results:
+        rq_text = r.get("research_question_text") or "General"
+        rq_groups[rq_text].append(r)
+
+    if not rq_groups:
+        return "No research questions with completed analysis found."
+
+    rq_list = project_context.get("research_questions") or []
+
+    causal_rule = (
+        "You may use causal language where supported by the experimental design."
+        if is_experimental
+        else f"NEVER use causal language. This is a {study_design} design — use only associational language (associated with, correlated with, related to)."
+    )
+
+    synthesis_data = []
+    for rq_text, results in rq_groups.items():
+        sig_results = [r for r in results if (r.get("p_value") or 1.0) < 0.05]
+        non_sig = [r for r in results if (r.get("p_value") or 1.0) >= 0.05]
+        synthesis_data.append({
+            "rq": rq_text,
+            "total_tests": len(results),
+            "significant": len(sig_results),
+            "non_significant": len(non_sig),
+            "results": [
+                {
+                    "test": r.get("selected_test"),
+                    "dep": r.get("dependent_variable"),
+                    "indep": r.get("independent_variable"),
+                    "p_value": r.get("p_value"),
+                    "effect_size": r.get("effect_size"),
+                    "effect_interpretation": r.get("effect_size_interpretation"),
+                    "significant": (r.get("p_value") or 1.0) < 0.05,
+                }
+                for r in results
+            ],
+        })
+
+    prompt = f"""You are a survey research analyst. Write a "Evidence Per Research Question" section.
+
+## Context
+- Project: {project_context['name']}
+- Study design: {study_design}
+- Template: {template}
+- Research questions: {json.dumps(rq_list, indent=2, default=str)}
+
+## Analysis Results by RQ
+{json.dumps(synthesis_data, indent=2, default=str)}
+
+## RULES
+1. For EACH research question, write ONE paragraph (3–5 sentences) that:
+   - Directly answers the RQ (yes/no/mixed evidence)
+   - References the specific statistics that support the answer (exact p-values, effect sizes)
+   - Notes practical significance, not just statistical significance
+   - Mentions non-significant findings briefly if relevant
+2. {causal_rule}
+3. Use bullet sub-points for individual test results, then conclude with a synthesis sentence.
+4. Use clear headings: "**RQ1: [abbreviated question]**"
+5. Keep language appropriate for a {template} audience.
+
+Return JSON with:
+- "content": string (markdown, with RQ headings and paragraphs)
+- "reasoning": string
+"""
+    try:
+        result = generate(prompt)
+        content = result.get("content", "")
+        if not is_experimental and content:
+            content = _strip_causal_language(content)
+        return content
+    except Exception as e:
+        logger.error("rq_synthesis_failed", error=str(e))
+        # Fallback: generate basic text without AI
+        lines = ["## Evidence Per Research Question\n"]
+        for item in synthesis_data:
+            lines.append(f"\n### {item['rq'][:80]}\n")
+            lines.append(f"{item['significant']} of {item['total_tests']} tests yielded significant results (p < 0.05).\n")
+            for r in item["results"]:
+                sig_marker = "✓" if r["significant"] else "✗"
+                lines.append(f"- {sig_marker} {r['test']}: {r['dep']} ← {r['indep']} | p={r['p_value']:.4f if r['p_value'] else '?'} | ES={r['effect_size']}\n")
+        return "".join(lines)
 
 
 def _draft_executive_summary(

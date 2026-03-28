@@ -1,6 +1,13 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { MoreHorizontal, Trash2 } from "lucide-react";
+import { createBrowserClient } from "@/lib/supabase/client";
 import type { Tables } from "@/lib/types/database";
 
 const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
@@ -17,9 +24,9 @@ const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secon
 
 interface ProjectCardProps {
   project: Tables<"projects">;
+  onDeleted?: (id: string) => void;
 }
 
-/** Parse description — it may be stored as JSON `{"text":"...","tags":[...]}` or plain string */
 function parseDescription(raw: string | null): { text: string | null; tags: string[] } {
   if (!raw) return { text: null, tags: [] };
   try {
@@ -36,7 +43,6 @@ function parseDescription(raw: string | null): { text: string | null; tags: stri
   return { text: raw, tags: [] };
 }
 
-/** Count completed steps from pipeline_status object */
 function countCompletedSteps(pipelineStatus: unknown): number {
   if (!pipelineStatus || typeof pipelineStatus !== "object") return 0;
   return Object.values(pipelineStatus as Record<string, string>).filter(
@@ -44,14 +50,19 @@ function countCompletedSteps(pipelineStatus: unknown): number {
   ).length;
 }
 
-export function ProjectCard({ project }: ProjectCardProps) {
+export function ProjectCard({ project, onDeleted }: ProjectCardProps) {
+  const router = useRouter();
+  const supabase = createBrowserClient();
+  const [showMenu, setShowMenu] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const statusInfo = STATUS_LABELS[project.status] ?? {
     label: project.status,
     variant: "secondary" as const,
   };
 
   const { text: descText, tags } = parseDescription(project.description);
-
   const totalSteps = 7;
   const completedSteps = countCompletedSteps(
     (project as unknown as { pipeline_status?: unknown }).pipeline_status
@@ -59,50 +70,120 @@ export function ProjectCard({ project }: ProjectCardProps) {
   const currentStep = (project as unknown as { current_step?: number }).current_step ?? 1;
   const progressPercent = Math.round((completedSteps / totalSteps) * 100);
 
-  return (
-    <Link href={`/projects/${project.id}`}>
-      <Card className="transition-colors hover:border-primary/50">
-        <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-          <CardTitle className="text-lg font-semibold">{project.name?.trim()}</CardTitle>
-          <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
-        </CardHeader>
-        <CardContent>
-          {descText && (
-            <p className="mb-2 line-clamp-2 text-sm text-muted-foreground">
-              {descText}
-            </p>
-          )}
-          {tags.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-1">
-              {tags.map((tag) => (
-                <Badge key={tag} variant="outline" className="text-xs">
-                  {tag}
-                </Badge>
-              ))}
-            </div>
-          )}
+  async function handleDelete(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDeleting(true);
+    // @ts-expect-error — supabase delete type inference
+    await supabase.from("projects").delete().eq("id", project.id);
+    setIsDeleting(false);
+    setShowConfirm(false);
+    onDeleted?.(project.id);
+    router.refresh();
+  }
 
-          {/* Workflow progress bar */}
-          <div className="mb-2 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">
-                Step {currentStep} of {totalSteps}
-              </span>
-              <span className="text-xs text-muted-foreground">{progressPercent}%</span>
+  return (
+    <div className="relative">
+      <Link href={`/projects/${project.id}`}>
+        <Card className="transition-colors hover:border-primary/50">
+          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+            <CardTitle className="text-lg font-semibold pr-8">{project.name?.trim()}</CardTitle>
+            <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
+          </CardHeader>
+          <CardContent>
+            {descText && (
+              <p className="mb-2 line-clamp-2 text-sm text-muted-foreground">
+                {descText}
+              </p>
+            )}
+            {tags.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1">
+                {tags.map((tag) => (
+                  <Badge key={tag} variant="outline" className="text-xs">
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+            )}
+            <div className="mb-2 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">
+                  Step {currentStep} of {totalSteps}
+                </span>
+                <span className="text-xs text-muted-foreground">{progressPercent}%</span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-300"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
             </div>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-primary transition-all duration-300"
-                style={{ width: `${progressPercent}%` }}
-              />
+            <p className="text-xs text-muted-foreground">
+              Created {new Date(project.created_at).toLocaleDateString()}
+            </p>
+          </CardContent>
+        </Card>
+      </Link>
+
+      {/* Kebab menu — absolutely positioned, outside Link */}
+      <div className="absolute right-3 top-3 z-10">
+        {!showConfirm ? (
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowMenu(!showMenu); }}
+            className="rounded p-1 text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground group-hover:opacity-100 transition-opacity [.relative:hover_&]:opacity-100"
+            aria-label="Project options"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </button>
+        ) : null}
+
+        {showMenu && !showConfirm && (
+          <div
+            className="absolute right-0 top-6 z-20 min-w-[140px] rounded-md border bg-popover p-1 shadow-md"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          >
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowMenu(false); setShowConfirm(true); }}
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm text-red-600 hover:bg-red-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete project
+            </button>
+          </div>
+        )}
+
+        {showConfirm && (
+          <div
+            className="absolute right-0 top-0 z-20 rounded-md border bg-popover p-3 shadow-md w-52"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          >
+            <p className="text-xs font-medium mb-2">Delete this project?</p>
+            <p className="text-xs text-muted-foreground mb-3">This cannot be undone.</p>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-7 text-xs"
+                onClick={handleDelete}
+                disabled={isDeleting}
+              >
+                {isDeleting ? "Deleting…" : "Delete"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowConfirm(false); }}
+              >
+                Cancel
+              </Button>
             </div>
           </div>
-
-          <p className="text-xs text-muted-foreground">
-            Created {new Date(project.created_at).toLocaleDateString()}
-          </p>
-        </CardContent>
-      </Card>
-    </Link>
+        )}
+      </div>
+    </div>
   );
 }

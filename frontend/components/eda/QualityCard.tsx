@@ -12,6 +12,106 @@ import {
 } from "lucide-react";
 import type { Json } from "@/lib/types/database";
 
+/** Inline SVG box-plot for continuous columns */
+function BoxPlot({ profile }: { profile: Record<string, Json> }) {
+  const min = Number(profile.min ?? 0);
+  const max = Number(profile.max ?? 1);
+  const p25 = Number(profile.p25 ?? min);
+  const p75 = Number(profile.p75 ?? max);
+  const median = Number(profile.median ?? (min + max) / 2);
+  const mean = Number(profile.mean ?? median);
+  const range = max - min || 1;
+  const W = 240;
+  const toX = (v: number) => ((v - min) / range) * W;
+
+  return (
+    <div className="mt-2">
+      <p className="mb-1 text-xs font-medium text-muted-foreground">Distribution (box plot)</p>
+      <svg width={W} height={40} className="overflow-visible">
+        {/* Whiskers */}
+        <line x1={toX(min)} y1={20} x2={toX(p25)} y2={20} stroke="#94a3b8" strokeWidth={1.5} />
+        <line x1={toX(p75)} y1={20} x2={toX(max)} y2={20} stroke="#94a3b8" strokeWidth={1.5} />
+        {/* IQR box */}
+        <rect x={toX(p25)} y={10} width={Math.max(toX(p75) - toX(p25), 2)} height={20} fill="#3b82f620" stroke="#3b82f6" strokeWidth={1.5} rx={2} />
+        {/* Median line */}
+        <line x1={toX(median)} y1={10} x2={toX(median)} y2={30} stroke="#3b82f6" strokeWidth={2} />
+        {/* Mean dot */}
+        <circle cx={toX(mean)} cy={20} r={3} fill="#f59e0b" />
+        {/* Labels */}
+        <text x={toX(min)} y={38} fontSize={8} fill="#94a3b8" textAnchor="middle">{typeof profile.min === 'number' ? profile.min.toFixed(1) : profile.min}</text>
+        <text x={toX(max)} y={38} fontSize={8} fill="#94a3b8" textAnchor="middle">{typeof profile.max === 'number' ? (profile.max as number).toFixed(1) : profile.max}</text>
+        <text x={toX(median)} y={7} fontSize={8} fill="#3b82f6" textAnchor="middle">med {typeof median === 'number' ? median.toFixed(1) : median}</text>
+      </svg>
+      <div className="mt-1 flex gap-4 text-xs text-muted-foreground">
+        <span>μ={typeof profile.mean === 'number' ? (profile.mean as number).toFixed(2) : profile.mean}</span>
+        <span>σ={typeof profile.std === 'number' ? (profile.std as number).toFixed(2) : profile.std}</span>
+        <span>skew={typeof profile.skewness === 'string' ? profile.skewness : ''}</span>
+        {Number(profile.outlier_count) > 0 && <span className="text-yellow-600">⚠ {String(profile.outlier_count)} outliers</span>}
+      </div>
+    </div>
+  );
+}
+
+/** Inline bar chart for Likert/ordinal with ordered_values */
+function LikertBars({ profile }: { profile: Record<string, Json> }) {
+  const freqTable = (profile.frequency_table ?? profile.frequency_table_top10 ?? {}) as Record<string, { count: number; pct: number }>;
+  const orderedKeys = (profile.ordered_values as string[] | null) ?? Object.keys(freqTable);
+  const maxPct = Math.max(...orderedKeys.map(k => freqTable[k]?.pct ?? 0), 1);
+
+  return (
+    <div className="mt-2">
+      <p className="mb-1 text-xs font-medium text-muted-foreground">Response distribution</p>
+      <div className="space-y-1">
+        {orderedKeys.map(k => {
+          const info = freqTable[k];
+          if (!info) return null;
+          const barPct = (info.pct / maxPct) * 100;
+          return (
+            <div key={k} className="flex items-center gap-2 text-xs">
+              <span className="w-20 truncate font-mono">{k}</span>
+              <div className="h-4 flex-1 overflow-hidden rounded bg-secondary">
+                <div className="h-full rounded bg-blue-500/60 transition-all" style={{ width: `${barPct}%` }} />
+              </div>
+              <span className="w-20 text-right text-muted-foreground">{info.count} ({info.pct.toFixed(1)}%)</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-1 flex gap-3 text-xs text-muted-foreground">
+        {profile.mode !== undefined && <span>mode: <span className="font-mono text-foreground">{String(profile.mode)}</span></span>}
+        {profile.median !== undefined && <span>median: <span className="font-mono text-foreground">{String(profile.median)}</span></span>}
+      </div>
+    </div>
+  );
+}
+
+/** Inline bar chart for categorical columns */
+function CategoricalBars({ profile }: { profile: Record<string, Json> }) {
+  const freqTable = (profile.frequency_table_top10 ?? profile.frequency_table ?? {}) as Record<string, { count: number; pct: number }>;
+  const entries = Object.entries(freqTable).slice(0, 8);
+  const maxPct = Math.max(...entries.map(([, v]) => v.pct), 1);
+
+  return (
+    <div className="mt-2">
+      <p className="mb-1 text-xs font-medium text-muted-foreground">Top categories</p>
+      <div className="space-y-1">
+        {entries.map(([k, info]) => (
+          <div key={k} className="flex items-center gap-2 text-xs">
+            <span className="w-24 truncate font-mono">{k}</span>
+            <div className="h-4 flex-1 overflow-hidden rounded bg-secondary">
+              <div className="h-full rounded bg-violet-500/60 transition-all" style={{ width: `${(info.pct / maxPct) * 100}%` }} />
+            </div>
+            <span className="w-20 text-right text-muted-foreground">{info.count} ({info.pct.toFixed(1)}%)</span>
+          </div>
+        ))}
+      </div>
+      {Number(profile.rare_count) > 0 && (
+        <p className="mt-1 text-xs text-muted-foreground">+ {String(profile.rare_count)} rare categories (&lt;1%)</p>
+      )}
+    </div>
+  );
+}
+
 interface QualityCardProps {
   columnName: string;
   role: string | null;
@@ -183,45 +283,23 @@ export function QualityCard({
               </div>
             )}
 
-            {/* Frequency table for categorical/likert */}
-            {profile &&
-              (profile.frequency_table || profile.frequency_table_top10) && (
-                <div>
-                  <p className="mb-1 text-xs font-medium text-muted-foreground">
-                    Value frequencies
-                  </p>
-                  <div className="space-y-1">
-                    {Object.entries(
-                      (profile.frequency_table ??
-                        profile.frequency_table_top10 ??
-                        {}) as Record<
-                        string,
-                        { count: number; pct: number }
-                      >,
-                    )
-                      .slice(0, 10)
-                      .map(([value, info]) => (
-                        <div
-                          key={value}
-                          className="flex items-center gap-2 text-xs"
-                        >
-                          <span className="w-24 truncate font-mono">
-                            {value}
-                          </span>
-                          <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
-                            <div
-                              className="h-full rounded-full bg-primary/60"
-                              style={{ width: `${info.pct}%` }}
-                            />
-                          </div>
-                          <span className="w-16 text-right text-muted-foreground">
-                            {info.count} ({info.pct}%)
-                          </span>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
+            {/* Distribution visualization — type-aware */}
+            {profile && (
+              <>
+                {/* Continuous: box plot */}
+                {(dataType === 'continuous' || (profile.p25 !== undefined && profile.p75 !== undefined)) && (
+                  <BoxPlot profile={profile} />
+                )}
+                {/* Likert/ordinal: ordered bars */}
+                {(dataType === 'likert' || dataType === 'ordinal') && profile.frequency_table && (
+                  <LikertBars profile={profile} />
+                )}
+                {/* Categorical/binary: horizontal bar chart */}
+                {(dataType === 'categorical' || dataType === 'binary') && (profile.frequency_table_top10 || profile.frequency_table) && (
+                  <CategoricalBars profile={profile} />
+                )}
+              </>
+            )}
 
             {/* Issues */}
             {issues.length > 0 && (
