@@ -648,8 +648,8 @@ export function Step5Analysis({
         ))}
       </div>
 
-      {/* Add Custom Test */}
-      {!allCompleted && (
+      {/* Add Custom Test — always visible (power users can add tests anytime) */}
+      {true && (
         <div className="pt-2">
           {!showCustomTestForm ? (
             <button

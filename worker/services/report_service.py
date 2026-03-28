@@ -664,21 +664,30 @@ def _generate_charts(
 
             db.upload_file("charts", storage_path, chart_data, "image/png")
 
-            # Insert chart record
-            chart_record = db.insert("charts", {
-                "project_id": project_id,
-                "analysis_result_id": result_id,
-                "created_by": created_by,
-                "chart_type": _determine_chart_type(result),
-                "title": _build_chart_title(result),
-                "config": json.dumps({"colorblind_safe": True, "colors": COLORS[:3]}),
-                "data": json.dumps({"source": "analysis_result", "result_id": result_id}),
-                "file_path": storage_path,
-                "has_sample_size": True,
-                "is_colorblind_safe": True,
-                "y_axis_starts_at_zero": True,
-                "has_source_note": True,
-            })
+            # Upsert chart record (may already exist from a previous report generation)
+            existing = db.client.table("charts").select("id").eq("analysis_result_id", result_id).execute().data
+            if existing:
+                chart_record = existing[0]
+                db.client.table("charts").update({
+                    "file_path": storage_path,
+                    "chart_type": _determine_chart_type(result),
+                    "title": _build_chart_title(result),
+                }).eq("id", chart_record["id"]).execute()
+            else:
+                chart_record = db.insert("charts", {
+                    "project_id": project_id,
+                    "analysis_result_id": result_id,
+                    "created_by": created_by,
+                    "chart_type": _determine_chart_type(result),
+                    "title": _build_chart_title(result),
+                    "config": json.dumps({"colorblind_safe": True, "colors": COLORS[:3]}),
+                    "data": json.dumps({"source": "analysis_result", "result_id": result_id}),
+                    "file_path": storage_path,
+                    "has_sample_size": True,
+                    "is_colorblind_safe": True,
+                    "y_axis_starts_at_zero": True,
+                    "has_source_note": True,
+                })
 
             chart_map[result_id] = chart_record["id"]
             logger.info("chart_generated", result_id=result_id, chart_id=chart_record["id"])
