@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Upload,
   FileText,
@@ -59,6 +60,7 @@ export function InstrumentUploader({ projectId }: InstrumentUploaderProps) {
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const router = useRouter();
   const { dispatchTask } = useDispatchTask();
   const taskProgress = useTaskProgress(taskId);
 
@@ -81,6 +83,8 @@ export function InstrumentUploader({ projectId }: InstrumentUploaderProps) {
           title: String(result.title ?? ""),
           message: String(result.message ?? ""),
         });
+        // Refresh server component to re-fetch parsed instrument from DB
+        router.refresh();
       }
     } else if (taskProgress.status === "failed" && uploadState !== "error") {
       setUploadState("error");

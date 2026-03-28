@@ -76,7 +76,7 @@ def parse_instrument(db: SupabaseDB, task_id: str, payload: dict[str, Any]) -> N
     except Exception as e:
         db.update("instruments", {
             "parse_status": "failed",
-            "parse_errors": json.dumps([{"error": f"Failed to download file: {e}"}]),
+            "parse_errors": [{"error": f"Failed to download file: {e}"}],
         }, {"id": instrument_id})
         raise ValueError(f"Failed to download instrument file: {e}") from e
 
@@ -95,7 +95,7 @@ def parse_instrument(db: SupabaseDB, task_id: str, payload: dict[str, Any]) -> N
     except Exception as e:
         db.update("instruments", {
             "parse_status": "failed",
-            "parse_errors": json.dumps([{"error": str(e)}]),
+            "parse_errors": [{"error": str(e)}],
         }, {"id": instrument_id})
         raise
 
@@ -105,11 +105,13 @@ def parse_instrument(db: SupabaseDB, task_id: str, payload: dict[str, Any]) -> N
     parsed_dict = _instrument_to_json(parsed)
 
     # Separate questions, choices, skip_logic, and settings for dedicated columns
-    questions_json = json.dumps(parsed_dict["questions"])
+    # IMPORTANT: Pass Python dicts/lists directly — do NOT use json.dumps() for JSONB columns.
+    # supabase-py serializes Python objects to JSON internally. Wrapping in json.dumps()
+    # produces a double-encoded string stored as a JSON string scalar, not an object.
+    questions_list: list[dict[str, Any]] = parsed_dict["questions"]
     choice_lists: dict[str, list[dict[str, Any]]] = {}
     for q in parsed.questions:
         if q.choices:
-            # Use the list_name from the type field for XLSForm
             parts = q.type.split(None, 1)
             list_name = parts[1] if len(parts) > 1 else q.name
             if list_name not in choice_lists:
@@ -129,15 +131,15 @@ def parse_instrument(db: SupabaseDB, task_id: str, payload: dict[str, Any]) -> N
         "languages": parsed.languages,
     }
 
-    # Step 5: Update instrument record
+    # Step 5: Update instrument record with native Python objects (not JSON strings)
     db.update("instruments", {
-        "parsed_structure": json.dumps(parsed_dict),
-        "questions": questions_json,
-        "skip_logic": json.dumps(skip_logic_entries),
-        "choice_lists": json.dumps(choice_lists),
-        "settings": json.dumps(settings_data),
+        "parsed_structure": parsed_dict,
+        "questions": questions_list,
+        "skip_logic": skip_logic_entries,
+        "choice_lists": choice_lists,
+        "settings": settings_data,
         "parse_status": "parsed",
-        "parse_errors": json.dumps([]),
+        "parse_errors": [],
     }, {"id": instrument_id})
 
     # Complete the task with summary
