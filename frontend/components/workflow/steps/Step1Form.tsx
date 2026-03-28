@@ -456,6 +456,7 @@ export function Step1Form({ project }: Step1FormProps) {
                     type="button"
                     disabled={idx === 0}
                     onClick={() => moveQuestion(idx, -1)}
+                    aria-label={`Move question ${idx + 1} up`}
                     className="text-muted-foreground hover:text-foreground disabled:opacity-30"
                   >
                     <ChevronUp className="h-4 w-4" />
@@ -464,6 +465,7 @@ export function Step1Form({ project }: Step1FormProps) {
                     type="button"
                     disabled={idx === researchQuestions.length - 1}
                     onClick={() => moveQuestion(idx, 1)}
+                    aria-label={`Move question ${idx + 1} down`}
                     className="text-muted-foreground hover:text-foreground disabled:opacity-30"
                   >
                     <ChevronDown className="h-4 w-4" />
@@ -474,12 +476,15 @@ export function Step1Form({ project }: Step1FormProps) {
                     value={q}
                     onChange={(e) => updateQuestion(idx, e.target.value)}
                     placeholder="Is there a significant difference in [outcome] between [groups]?"
+                    aria-label={`Research question ${idx + 1}`}
+                    id={`rq-${idx}`}
                   />
                 </div>
                 {researchQuestions.length > 1 && (
                   <button
                     type="button"
                     onClick={() => removeQuestion(idx)}
+                    aria-label={`Remove question ${idx + 1}`}
                     className="mt-2.5 text-muted-foreground hover:text-red-500"
                   >
                     <X className="h-4 w-4" />

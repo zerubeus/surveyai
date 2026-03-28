@@ -115,7 +115,7 @@ export default function SignupPage() {
       <div className="w-full max-w-md px-4">
         <Card>
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl">SurveyAI Analyst</CardTitle>
+            <h1 className="text-2xl font-semibold tracking-tight">SurveyAI Analyst</h1>
             <CardDescription>Create your account</CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
