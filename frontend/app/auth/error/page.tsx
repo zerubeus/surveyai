@@ -8,14 +8,15 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-export default function AuthErrorPage({
+export default async function AuthErrorPage({
   searchParams,
 }: {
-  searchParams: { error?: string; error_description?: string };
+  searchParams: Promise<{ error?: string; error_description?: string }>;
 }) {
+  const { error, error_description } = await searchParams;
   const errorMessage =
-    searchParams.error_description ||
-    searchParams.error ||
+    error_description ||
+    error ||
     "An unexpected authentication error occurred.";
 
   return (

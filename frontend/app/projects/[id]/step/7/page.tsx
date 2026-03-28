@@ -6,8 +6,9 @@ import type { Tables } from "@/lib/types/database";
 export default async function Step7Page({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -17,7 +18,7 @@ export default async function Step7Page({
   const { data: project } = await supabase
     .from("projects")
     .select("*")
-    .eq("id", params.id)
+    .eq("id", id)
     .single();
   if (!project) notFound();
 
@@ -25,7 +26,7 @@ export default async function Step7Page({
   const { data: runningTasksRaw } = await supabase
     .from("tasks")
     .select("id, task_type, status")
-    .eq("project_id", params.id)
+    .eq("project_id", id)
     .in("task_type", ["generate_report", "export_report"])
     .in("status", ["pending", "claimed", "running"])
     .order("created_at", { ascending: false })

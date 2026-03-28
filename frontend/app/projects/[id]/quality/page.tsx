@@ -10,8 +10,9 @@ import type { Tables } from "@/lib/types/database";
 export default async function DataQualityPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -24,7 +25,7 @@ export default async function DataQualityPage({
   const { data: projectRaw } = await supabase
     .from("projects")
     .select("*")
-    .eq("id", params.id)
+    .eq("id", id)
     .single();
   const project = projectRaw as Tables<"projects"> | null;
 
@@ -46,7 +47,7 @@ export default async function DataQualityPage({
   // Allow access for any dataset that has been confirmed (or progressed past confirmation)
   const confirmedStatuses = ["confirmed", "profiled", "cleaning", "cleaned", "analyzed"];
   if (!dataset || !confirmedStatuses.includes(dataset.status)) {
-    redirect(`/projects/${params.id}`);
+    redirect(`/projects/${id}`);
   }
 
   return (
@@ -54,7 +55,7 @@ export default async function DataQualityPage({
       {/* Navigation */}
       <div className="mb-6 flex items-center gap-3">
         <Button variant="ghost" size="sm" asChild>
-          <Link href={`/projects/${params.id}`}>
+          <Link href={`/projects/${id}`}>
             <ChevronLeft className="mr-1 h-4 w-4" />
             Back to Project
           </Link>

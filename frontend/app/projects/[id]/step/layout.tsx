@@ -20,8 +20,9 @@ export default async function StepLayout({
   params,
 }: {
   children: React.ReactNode;
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -34,7 +35,7 @@ export default async function StepLayout({
   const { data: projectRaw } = await supabase
     .from("projects")
     .select("id, name, current_step, pipeline_status")
-    .eq("id", params.id)
+    .eq("id", id)
     .single();
   const project = projectRaw as { id: string; name: string; current_step: number | null; pipeline_status: unknown } | null;
 

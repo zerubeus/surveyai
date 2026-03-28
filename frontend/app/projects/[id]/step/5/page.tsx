@@ -6,8 +6,9 @@ import type { Tables } from "@/lib/types/database";
 export default async function Step5Page({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -17,7 +18,7 @@ export default async function Step5Page({
   const { data: project } = await supabase
     .from("projects")
     .select("*")
-    .eq("id", params.id)
+    .eq("id", id)
     .single();
   if (!project) notFound();
 
@@ -25,7 +26,7 @@ export default async function Step5Page({
   const { data: datasetRaw } = await supabase
     .from("datasets")
     .select("*")
-    .eq("project_id", params.id)
+    .eq("project_id", id)
     .eq("is_current", true)
     .maybeSingle();
   const dataset = datasetRaw as Tables<"datasets"> | null;
@@ -54,7 +55,7 @@ export default async function Step5Page({
   const { data: runningTasksRaw } = await supabase
     .from("tasks")
     .select("id, task_type, status")
-    .eq("project_id", params.id)
+    .eq("project_id", id)
     .in("task_type", ["generate_analysis_plan", "run_analysis"])
     .in("status", ["pending", "claimed", "running"])
     .order("created_at", { ascending: false })
