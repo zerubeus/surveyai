@@ -40,7 +40,8 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname === "/" ||
     request.nextUrl.pathname === "/landing" ||
     request.nextUrl.pathname === "/setup" ||
-    request.nextUrl.pathname === "/privacy";
+    request.nextUrl.pathname === "/privacy" ||
+    request.nextUrl.pathname.startsWith("/share/");
 
   if (!user && !isAuthRoute && !isPublicRoute) {
     const url = request.nextUrl.clone();

@@ -133,6 +133,8 @@ export function Step6Results({
   const taskProgress = useTaskProgress(taskId);
   const { dispatchTask } = useDispatchTask();
   const [rerunningTestIds, setRerunningTestIds] = useState<Set<string>>(new Set());
+  const RESULTS_PER_PAGE = 5;
+  const [expandedRQs, setExpandedRQs] = useState<Set<string>>(new Set());
 
   /* ---------- Analysis data ---------- */
   const { plans, results, isLoading } = useAnalysisResults(datasetId);
@@ -585,39 +587,67 @@ export function Step6Results({
       )}
 
       {/* Results grouped by RQ */}
-      {groupedResults.map((group) => (
-        <Card key={group.rqText}>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium leading-snug">
-              {group.rqText}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {group.items.map(({ result, plan, chart }) => (
-              <ResultCard
-                key={result.id}
-                result={result}
-                plan={plan}
-                chart={chart}
-                chartUrl={chart ? chartUrls[chart.id] : undefined}
-                isIncluded={included.has(result.id)}
-                interpretationValue={editingInterpretations[result.id]}
-                isAssumptionsExpanded={expandedAssumptions.has(result.id)}
-                onToggleInclude={() => handleToggleInclude(result.id)}
-                onInterpretationChange={(v) =>
-                  handleInterpretationChange(result.id, v)
-                }
-                onInterpretationBlur={() =>
-                  handleInterpretationBlur(result.id)
-                }
-                onToggleAssumptions={() => toggleAssumptions(result.id)}
-                onRerunTest={() => handleRerunTest(plan.id, result.id)}
-                isRerunning={rerunningTestIds.has(result.id)}
-              />
-            ))}
-          </CardContent>
-        </Card>
-      ))}
+      {groupedResults.map((group) => {
+        const isExpanded = expandedRQs.has(group.rqText);
+        const visibleItems = isExpanded ? group.items : group.items.slice(0, RESULTS_PER_PAGE);
+        const hasMore = group.items.length > RESULTS_PER_PAGE;
+        return (
+          <Card key={group.rqText}>
+            <CardHeader>
+              <div className="flex items-start justify-between gap-3">
+                <CardTitle className="text-sm font-medium leading-snug flex-1">
+                  {group.rqText}
+                </CardTitle>
+                <span className="text-xs text-muted-foreground flex-shrink-0">
+                  {group.items.length} test{group.items.length !== 1 ? "s" : ""}
+                  {" · "}
+                  {group.items.filter(({ result }) => (result.p_value ?? 1) < 0.05).length} significant
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {visibleItems.map(({ result, plan, chart }) => (
+                <ResultCard
+                  key={result.id}
+                  result={result}
+                  plan={plan}
+                  chart={chart}
+                  chartUrl={chart ? chartUrls[chart.id] : undefined}
+                  isIncluded={included.has(result.id)}
+                  interpretationValue={editingInterpretations[result.id]}
+                  isAssumptionsExpanded={expandedAssumptions.has(result.id)}
+                  onToggleInclude={() => handleToggleInclude(result.id)}
+                  onInterpretationChange={(v) =>
+                    handleInterpretationChange(result.id, v)
+                  }
+                  onInterpretationBlur={() =>
+                    handleInterpretationBlur(result.id)
+                  }
+                  onToggleAssumptions={() => toggleAssumptions(result.id)}
+                  onRerunTest={() => handleRerunTest(plan.id, result.id)}
+                  isRerunning={rerunningTestIds.has(result.id)}
+                />
+              ))}
+              {hasMore && (
+                <button
+                  type="button"
+                  onClick={() => setExpandedRQs(prev => {
+                    const next = new Set(prev);
+                    if (isExpanded) next.delete(group.rqText);
+                    else next.add(group.rqText);
+                    return next;
+                  })}
+                  className="w-full rounded-lg border border-dashed py-2 text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                >
+                  {isExpanded
+                    ? `↑ Show fewer`
+                    : `↓ Show ${group.items.length - RESULTS_PER_PAGE} more tests`}
+                </button>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
 
       {/* Summary panel */}
       <Card>

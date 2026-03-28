@@ -169,6 +169,8 @@ export function Step7Report({
   );
   const [editingTitle, setEditingTitle] = useState("");
   const [editingContent, setEditingContent] = useState("");
+  const [sectionBaseUpdatedAt, setSectionBaseUpdatedAt] = useState<Record<string, string>>({});
+  const [conflictWarning, setConflictWarning] = useState<string | null>(null);
   const [showChangeTemplateConfirm, setShowChangeTemplateConfirm] =
     useState(false);
 
@@ -200,6 +202,12 @@ export function Step7Report({
     if (selectedSection) {
       setEditingTitle(selectedSection.title);
       setEditingContent(selectedSection.content ?? "");
+      setConflictWarning(null);
+      // Record the updated_at at the time we loaded this section
+      setSectionBaseUpdatedAt(prev => ({
+        ...prev,
+        [selectedSection.id]: selectedSection.updated_at,
+      }));
     }
   }, [selectedSection]);
 
@@ -353,6 +361,24 @@ export function Step7Report({
     async (field: "title" | "content") => {
       if (!selectedSectionId) return;
 
+      // Conflict check: if updated_at changed since we loaded the section, warn
+      const baseTime = sectionBaseUpdatedAt[selectedSectionId];
+      if (baseTime) {
+        // @ts-ignore — supabase select type inference
+        const { data: freshRaw } = await supabase
+          .from("report_sections")
+          .select("updated_at")
+          .eq("id", selectedSectionId)
+          .single();
+        const fresh = freshRaw as { updated_at: string } | null;
+        if (fresh?.updated_at && fresh.updated_at !== baseTime) {
+          setConflictWarning(
+            `⚠️ This section was edited by someone else (${new Date(fresh.updated_at).toLocaleTimeString()}). Your save will overwrite their changes.`
+          );
+          // Still save — just warn. Could add a "discard" option here.
+        }
+      }
+
       const updateData =
         field === "title"
           ? { title: editingTitle }
@@ -367,9 +393,16 @@ export function Step7Report({
 
       if (error) {
         toast(`Failed to save section ${field}`, { variant: "error" });
+      } else {
+        // Update our baseline to the new saved time
+        setSectionBaseUpdatedAt(prev => ({
+          ...prev,
+          [selectedSectionId]: new Date().toISOString(),
+        }));
+        setConflictWarning(null);
       }
     },
-    [selectedSectionId, editingTitle, editingContent, supabase],
+    [selectedSectionId, editingTitle, editingContent, supabase, sectionBaseUpdatedAt],
   );
 
   const handleMoveSection = useCallback(
@@ -415,6 +448,60 @@ export function Step7Report({
     },
     [projectId, report, dispatchTask],
   );
+
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [isGeneratingShare, setIsGeneratingShare] = useState(false);
+
+  const handleGenerateShareLink = useCallback(async () => {
+    if (!report) return;
+    setIsGeneratingShare(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      // Check if share already exists for this report
+      // @ts-ignore — supabase select type inference
+      const { data: existingRaw } = await supabase
+        .from("report_shares")
+        .select("token")
+        .eq("report_id", report.id)
+        .eq("is_active", true)
+        .limit(1)
+        .maybeSingle();
+      const existing = existingRaw as { token: string } | null;
+
+      let token: string;
+      if (existing?.token) {
+        token = existing.token;
+      } else {
+        // Create new share (expires in 30 days)
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        // @ts-ignore — supabase insert type inference
+        const { data: newShareRaw } = await supabase
+          .from("report_shares")
+          // @ts-ignore — supabase type inference
+          .insert({
+            report_id: report.id,
+            created_by: user.id,
+            expires_at: expiresAt,
+          })
+          .select("token")
+          .single();
+        const newShare = newShareRaw as { token: string } | null;
+        if (!newShare?.token) throw new Error("Failed to create share link");
+        token = newShare.token;
+      }
+
+      const url = `${window.location.origin}/share/${token}`;
+      setShareUrl(url);
+      await navigator.clipboard.writeText(url).catch(() => {});
+      toast("Share link copied to clipboard!", { variant: "success" });
+    } catch (err) {
+      toast(`Failed to generate share link: ${err instanceof Error ? err.message : "unknown"}`, { variant: "error" });
+    } finally {
+      setIsGeneratingShare(false);
+    }
+  }, [report, supabase]);
 
   /* ================================================================ */
   /*  Loading                                                          */
@@ -611,6 +698,22 @@ export function Step7Report({
 
         {/* Main panel — section content (75%) */}
         <div className="flex-1 rounded-lg border p-6 space-y-4">
+          {conflictWarning && (
+            <div className="flex items-start gap-2 rounded-lg border border-orange-200 bg-orange-50 p-3 text-xs text-orange-800">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-orange-500" />
+              <div>
+                <p className="font-medium">Edit conflict detected</p>
+                <p className="mt-0.5">{conflictWarning}</p>
+                <button
+                  type="button"
+                  onClick={() => setConflictWarning(null)}
+                  className="mt-1 text-orange-600 underline hover:no-underline"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
           {selectedSection ? (
             <SectionEditor
               section={selectedSection}
@@ -641,6 +744,9 @@ export function Step7Report({
         latestExport={latestExport}
         expiresIn={expiresIn}
         onExport={handleExport}
+        shareUrl={shareUrl}
+        isGeneratingShare={isGeneratingShare}
+        onGenerateShareLink={handleGenerateShareLink}
       />
     </div>
   );
@@ -789,6 +895,9 @@ function ExportPanel({
   latestExport,
   expiresIn,
   onExport,
+  shareUrl,
+  isGeneratingShare,
+  onGenerateShareLink,
 }: {
   isExporting: boolean;
   isDispatching: boolean;
@@ -797,6 +906,9 @@ function ExportPanel({
   latestExport: Tables<"report_exports"> | null;
   expiresIn: number;
   onExport: (format: "docx" | "pdf") => void;
+  shareUrl: string | null;
+  isGeneratingShare: boolean;
+  onGenerateShareLink: () => void;
 }) {
   return (
     <Card className="sticky bottom-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
@@ -856,6 +968,40 @@ function ExportPanel({
             )}
           </div>
         )}
+
+        {/* Share link */}
+        <div className="border-t pt-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">Share report (read-only)</p>
+              <p className="text-xs text-muted-foreground">Generate a link anyone can view without signing in. Expires in 30 days.</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onGenerateShareLink}
+              disabled={isGeneratingShare}
+              className="flex-shrink-0"
+            >
+              {isGeneratingShare
+                ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
+              {shareUrl ? "Regenerate" : "Generate link"}
+            </Button>
+          </div>
+          {shareUrl && (
+            <div className="mt-2 flex items-center gap-2 rounded-md border bg-gray-50 p-2">
+              <code className="flex-1 truncate text-xs text-blue-700">{shareUrl}</code>
+              <button
+                type="button"
+                onClick={() => { navigator.clipboard.writeText(shareUrl).catch(() => {}); toast("Copied!", { variant: "success", duration: 2000 }); }}
+                className="rounded px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-200"
+              >
+                Copy
+              </button>
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

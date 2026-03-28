@@ -218,6 +218,44 @@ export function Step2Upload({
   }, []);
 
   /* ================================================================ */
+  /*  Realtime: watch instrument parse_status changes                  */
+  /* ================================================================ */
+  useEffect(() => {
+    if (!instrument?.id || instrumentPhase === "complete" || instrumentPhase === "error") return;
+    if (instrumentPhase !== "parsing") return;
+
+    const channel = supabase
+      .channel(`instrument-parse-${instrument.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "instruments",
+          filter: `id=eq.${instrument.id}`,
+        },
+        (payload) => {
+          const updated = payload.new as { parse_status: string; questions: unknown; skip_logic: unknown };
+          if (updated.parse_status === "parsed") {
+            setInstrumentPhase("complete");
+            setInstrument((prev) =>
+              prev
+                ? { ...prev, parse_status: "parsed", questions: updated.questions as never, skip_logic: updated.skip_logic as never }
+                : prev,
+            );
+          } else if (updated.parse_status === "failed") {
+            setInstrumentPhase("error");
+            setInstrumentError("Parse failed — you can continue without the instrument.");
+          }
+        },
+      )
+      .subscribe();
+
+    return () => { void supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instrument?.id, instrumentPhase]);
+
+  /* ================================================================ */
   /*  Dataset helpers                                                  */
   /* ================================================================ */
 
