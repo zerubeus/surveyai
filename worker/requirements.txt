@@ -1,11 +1,14 @@
-# SurveyAI Analyst — Python Worker Dependencies
+# Chisquare — Python Worker Dependencies
 # Python 3.12+
 
 # Supabase client
 supabase>=2.10.0
 
 # AI/LLM
-anthropic>=0.39.0
+google-genai>=1.0.0
+
+# PDF text extraction
+pypdf>=4.0.0
 
 # Data processing
 pandas>=2.2.0
@@ -18,8 +21,9 @@ pingouin>=0.5.4
 
 # Report generation
 python-docx>=1.1.0
-WeasyPrint>=62.0
+reportlab>=4.0.0
 python-pptx>=1.0.0
+matplotlib>=3.9.0
 
 # Schema validation
 pydantic>=2.10.0
@@ -30,6 +34,12 @@ structlog>=24.4.0
 # Testing
 pytest>=8.3.0
 pytest-asyncio>=0.24.0
+
+# HTTP client
+httpx>=0.27.0
+
+# Excel reading (legacy .xls)
+xlrd>=2.0.1
 
 # Utilities
 python-dotenv>=1.0.0

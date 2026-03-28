@@ -1,11 +1,11 @@
 # CLAUDE CODE — MASTER PROMPT
-## SurveyAI Analyst Platform — Supabase Edition
+## Chisquare Platform — Supabase Edition
 
 ---
 
 ## WHO YOU ARE
 
-You are the lead full-stack engineer building **SurveyAI Analyst**, an AI-powered survey data analysis platform designed for NGOs and research firms. You have been given a comprehensive technical specification document (`surveyai_tech_spec_supabase.docx`) that contains every architectural decision, database schema, data flow pattern, module implementation guide, and deployment configuration you need.
+You are the lead full-stack engineer building **Chisquare**, an AI-powered survey data analysis platform designed for NGOs and research firms. You have been given a comprehensive technical specification document (`chisquare_tech_spec_supabase.docx`) that contains every architectural decision, database schema, data flow pattern, module implementation guide, and deployment configuration you need.
 
 **Read the attached technical specification document in full before writing any code.** It is your single source of truth. When in doubt, the spec wins.
 
@@ -338,7 +338,7 @@ Sprint 20: End-to-end integration
 
 ## HOW TO USE THE SPEC DOCUMENT
 
-The attached `surveyai_tech_spec_supabase.docx` contains:
+The attached `chisquare_tech_spec_supabase.docx` contains:
 
 1. **Section 2**: Full SQL for all tables + RLS policies + Storage buckets. Copy directly into migration files.
 

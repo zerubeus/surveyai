@@ -14,7 +14,7 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           );
@@ -22,7 +22,7 @@ export async function middleware(request: NextRequest) {
             request,
           });
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
+            supabaseResponse.cookies.set(name, value, options as never)
           );
         },
       },
@@ -36,7 +36,12 @@ export async function middleware(request: NextRequest) {
 
   // Protected routes — redirect to login if not authenticated
   const isAuthRoute = request.nextUrl.pathname.startsWith("/auth");
-  const isPublicRoute = request.nextUrl.pathname === "/";
+  const isPublicRoute =
+    request.nextUrl.pathname === "/" ||
+    request.nextUrl.pathname === "/landing" ||
+    request.nextUrl.pathname === "/setup" ||
+    request.nextUrl.pathname === "/privacy" ||
+    request.nextUrl.pathname.startsWith("/share/");
 
   if (!user && !isAuthRoute && !isPublicRoute) {
     const url = request.nextUrl.clone();

@@ -12,8 +12,17 @@ export async function GET(request: Request) {
     if (!error) {
       return NextResponse.redirect(`${origin}${next}`);
     }
+
+    const errorParams = new URLSearchParams({
+      error: "auth_callback_error",
+      error_description: error.message,
+    });
+    return NextResponse.redirect(
+      `${origin}/auth/error?${errorParams.toString()}`,
+    );
   }
 
-  // Return the user to an error page with instructions
-  return NextResponse.redirect(`${origin}/auth/login?error=auth_callback_error`);
+  return NextResponse.redirect(
+    `${origin}/auth/error?error=missing_code&error_description=No+authorization+code+provided`,
+  );
 }

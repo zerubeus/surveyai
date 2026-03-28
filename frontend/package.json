@@ -1,5 +1,5 @@
 {
-  "name": "surveyai-frontend",
+  "name": "chisquare-frontend",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -11,22 +11,33 @@
     "gen:types": "npx supabase gen types typescript --local > lib/types/database.ts"
   },
   "dependencies": {
+    "@radix-ui/react-accordion": "^1.2.12",
+    "@radix-ui/react-collapsible": "^1.1.12",
+    "@radix-ui/react-label": "^2.1.8",
+    "@radix-ui/react-select": "^2.2.6",
+    "@radix-ui/react-separator": "^1.1.8",
+    "@radix-ui/react-slot": "^1.2.4",
     "@supabase/ssr": "^0.5.2",
-    "@supabase/supabase-js": "^2.47.10",
+    "@supabase/supabase-js": "^2.100.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "driver.js": "^1.4.0",
     "lucide-react": "^0.468.0",
     "next": "14.2.21",
+    "next-intl": "^4.8.3",
+    "papaparse": "^5.5.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.15.0",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
+    "xlsx": "^0.18.5",
     "zod": "^3.24.1",
     "zustand": "^5.0.2"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "@types/papaparse": "^5.5.2",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "autoprefixer": "^10.4.20",

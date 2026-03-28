@@ -1,5 +1,5 @@
 /**
- * SurveyAI Analyst — Database Types
+ * Chisquare — Database Types
  *
  * AUTO-GENERATED PLACEHOLDER — Replace with output of:
  *   npx supabase gen types typescript --local > lib/types/database.ts
@@ -105,6 +105,8 @@ export type Database = {
           ethical_approval: string | null;
           funding_source: string | null;
           additional_context: string | null;
+          current_step: number;
+          pipeline_status: Json;
           created_at: string;
           updated_at: string;
         };
@@ -126,6 +128,8 @@ export type Database = {
           ethical_approval?: string | null;
           funding_source?: string | null;
           additional_context?: string | null;
+          current_step?: number;
+          pipeline_status?: Json;
           created_at?: string;
           updated_at?: string;
         };
@@ -147,6 +151,8 @@ export type Database = {
           ethical_approval?: string | null;
           funding_source?: string | null;
           additional_context?: string | null;
+          current_step?: number;
+          pipeline_status?: Json;
           updated_at?: string;
         };
         Relationships: [
@@ -389,9 +395,12 @@ export type Database = {
           dataset_id: string;
           column_name: string | null;
           result_type: string;
+          column_role: Database["public"]["Enums"]["column_role"] | null;
+          data_type: Database["public"]["Enums"]["column_data_type"] | null;
           profile: Json | null;
           quality_score: number | null;
           issues: Json;
+          interpretation: Json | null;
           bias_type: Database["public"]["Enums"]["bias_type"] | null;
           bias_severity: Database["public"]["Enums"]["severity_level"] | null;
           bias_evidence: Json | null;
@@ -403,9 +412,12 @@ export type Database = {
           dataset_id: string;
           column_name?: string | null;
           result_type: string;
+          column_role?: Database["public"]["Enums"]["column_role"] | null;
+          data_type?: Database["public"]["Enums"]["column_data_type"] | null;
           profile?: Json | null;
           quality_score?: number | null;
           issues?: Json;
+          interpretation?: Json | null;
           bias_type?: Database["public"]["Enums"]["bias_type"] | null;
           bias_severity?: Database["public"]["Enums"]["severity_level"] | null;
           bias_evidence?: Json | null;
@@ -417,9 +429,12 @@ export type Database = {
           dataset_id?: string;
           column_name?: string | null;
           result_type?: string;
+          column_role?: Database["public"]["Enums"]["column_role"] | null;
+          data_type?: Database["public"]["Enums"]["column_data_type"] | null;
           profile?: Json | null;
           quality_score?: number | null;
           issues?: Json;
+          interpretation?: Json | null;
           bias_type?: Database["public"]["Enums"]["bias_type"] | null;
           bias_severity?: Database["public"]["Enums"]["severity_level"] | null;
           bias_evidence?: Json | null;
@@ -1206,8 +1221,10 @@ export type Database = {
         | "run_bias_detection"
         | "generate_cleaning_suggestions"
         | "apply_cleaning_operation"
+        | "generate_analysis_plan"
         | "run_analysis"
         | "interpret_results"
+        | "generate_report"
         | "generate_report_section"
         | "generate_chart"
         | "export_report"
@@ -1244,6 +1261,7 @@ export type Database = {
       analysis_status:
         | "planned"
         | "approved"
+        | "rejected"
         | "running"
         | "completed"
         | "failed";
@@ -1271,3 +1289,7 @@ export type Enums<T extends keyof Database["public"]["Enums"]> =
   Database["public"]["Enums"][T];
 export type Functions<T extends keyof Database["public"]["Functions"]> =
   Database["public"]["Functions"][T];
+
+// Pipeline step status types
+export type StepStatus = "active" | "completed" | "locked" | "needs-refresh";
+export type PipelineStatus = Record<string, StepStatus>;
