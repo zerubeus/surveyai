@@ -37,6 +37,7 @@ export default function CleaningPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [loading, setLoading] = useState(true);
+  const [ranWithNoSuggestions, setRanWithNoSuggestions] = useState(false);
   const [generateTaskId, setGenerateTaskId] = useState<string | null>(null);
 
   const { dispatchTask, isDispatching } = useDispatchTask();
@@ -118,12 +119,19 @@ export default function CleaningPage() {
   useEffect(() => {
     if (generateProgress.status === "completed" && generateTaskId && !hasFetchedRef.current) {
       hasFetchedRef.current = true;
-      refetchSuggestions().finally(() => setGenerateTaskId(null));
+      refetchSuggestions();
+      // After refetch settles, check if we got suggestions. Use timeout to let state update.
+      setTimeout(() => {
+        setGenerateTaskId(null);
+      }, 500);
     }
   }, [generateProgress.status, generateTaskId, refetchSuggestions]);
 
   useEffect(() => {
-    if (generateTaskId) hasFetchedRef.current = false;
+    if (generateTaskId) {
+      hasFetchedRef.current = false;
+      setRanWithNoSuggestions(false);
+    }
   }, [generateTaskId]);
 
   const isGenerating =
@@ -133,9 +141,16 @@ export default function CleaningPage() {
      generateProgress.status === "claimed");
 
   const hasSuggestions = all.length > 0;
-  // Task ran but produced 0 suggestions — data is already clean
-  const analysisRanClean = !generateTaskId && !hasSuggestions && !suggestionsLoading &&
-    generateProgress.status === "completed";
+
+  // When task completes and we have no suggestions, mark as "ran clean"
+  useEffect(() => {
+    if (!generateTaskId && !suggestionsLoading && !hasSuggestions && hasFetchedRef.current) {
+      setRanWithNoSuggestions(true);
+    }
+  }, [generateTaskId, suggestionsLoading, hasSuggestions]);
+
+  // Task ran but produced 0 suggestions — data is already clean (stable state)
+  const analysisRanClean = ranWithNoSuggestions && !hasSuggestions && !isGenerating;
 
   if (loading) {
     return (
