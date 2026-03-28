@@ -5,7 +5,7 @@
 supabase>=2.10.0
 
 # AI/LLM
-anthropic>=0.39.0
+google-genai>=1.0.0
 
 # PDF text extraction
 pypdf>=4.0.0

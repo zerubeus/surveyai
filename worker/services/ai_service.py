@@ -1,14 +1,13 @@
 """
 SurveyAI Analyst — AI Service
 
-Uses Google Gemini API (gemini-3.1-flash-lite-preview) for all AI/LLM tasks:
+Uses Google Gemini API (google-genai SDK) for all AI/LLM tasks:
 - Column role suggestion
 - Cleaning operation reasoning
 - Result interpretation
 - Report section drafting
 
-API key is fetched from Supabase Vault via service_role at startup.
-It is NEVER read from environment variables exposed to users.
+API key is fetched from environment (worker/.env).
 All calls include confidence scoring and reasoning fields (invariant A7).
 """
 
@@ -19,23 +18,26 @@ import json
 from typing import Any
 
 import structlog
-import google.generativeai as genai
+from google import genai
+from google.genai import types as genai_types
 
 logger = structlog.get_logger()
 
+# Cached client
+_client: genai.Client | None = None
 
-def _get_model() -> genai.GenerativeModel:
+
+def _get_client() -> tuple[genai.Client, str]:
     """
-    Initialize Gemini client.
-    The worker process reads the API key from its environment (worker/.env).
-    The key is loaded into the worker's environment at startup via python-dotenv.
-    It is never sent to the frontend — the worker runs server-side only.
-    The Supabase Vault copy provides a second source-of-truth for auditing.
+    Initialize Gemini client using google-genai SDK.
+    Returns (client, model_name).
     """
+    global _client
     api_key = os.environ["GEMINI_API_KEY"]
     model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-    genai.configure(api_key=api_key)
-    return genai.GenerativeModel(model_name)
+    if _client is None:
+        _client = genai.Client(api_key=api_key)
+    return _client, model_name
 
 
 def build_column_role_prompt(
@@ -146,17 +148,18 @@ def generate(prompt: str) -> dict[str, Any]:
         ValueError: If response cannot be parsed as JSON
         RuntimeError: If API call fails
     """
-    model = _get_model()
+    client, model_name = _get_client()
 
-    generation_config = genai.types.GenerationConfig(
+    config = genai_types.GenerateContentConfig(
         temperature=0.2,
         response_mime_type="application/json",
     )
 
     try:
-        response = model.generate_content(
-            prompt,
-            generation_config=generation_config,
+        response = client.models.generate_content(
+            model=model_name,
+            contents=prompt,
+            config=config,
         )
         text = response.text.strip()
         result = json.loads(text)

@@ -252,24 +252,79 @@ export function Step7Report({
 
   const handleGenerateReport = useCallback(async () => {
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      // Get current dataset
+      const { data: datasets } = await supabase
+        .from("datasets")
+        .select("id")
+        .eq("project_id", projectId)
+        .eq("is_current", true)
+        .limit(1);
+      const datasetId = datasets?.[0]?.id;
+      if (!datasetId) {
+        toast("No confirmed dataset found. Please complete Step 2 first.", { variant: "error" });
+        return;
+      }
+
+      // Upsert report record
+      let reportId: string;
+      if (report?.id) {
+        reportId = report.id;
+      } else {
+        const { data: newReport, error: reportErr } = await supabase
+          .from("reports")
+          .insert({
+            project_id: projectId,
+            dataset_id: datasetId,
+            template: selectedTemplate,
+            status: "pending",
+            created_by: user?.id ?? null,
+          })
+          .select("id")
+          .single();
+        if (reportErr || !newReport) {
+          throw new Error(reportErr?.message ?? "Failed to create report record");
+        }
+        reportId = newReport.id;
+      }
+
       const { taskId } = await dispatchTask(projectId, "generate_report", {
         template: selectedTemplate,
-      });
+        report_id: reportId,
+        project_id: projectId,
+      }, datasetId);
       setGenerateTaskId(taskId);
       toast("Generating report...", { variant: "default" });
-    } catch {
-      toast("Failed to start report generation", { variant: "error" });
+    } catch (e) {
+      toast(`Failed to start report generation: ${e instanceof Error ? e.message : "Unknown error"}`, { variant: "error" });
     }
-  }, [projectId, selectedTemplate, dispatchTask]);
+  }, [projectId, selectedTemplate, dispatchTask, report, supabase]);
 
   const handleChangeTemplate = useCallback(
     async (template: ReportTemplate) => {
       setShowChangeTemplateConfirm(false);
+      if (!report?.id) {
+        toast("No report to regenerate. Generate one first.", { variant: "error" });
+        return;
+      }
       try {
+        const { data: datasets } = await supabase
+          .from("datasets")
+          .select("id")
+          .eq("project_id", projectId)
+          .eq("is_current", true)
+          .limit(1);
+        const datasetId = datasets?.[0]?.id;
+
         const { taskId } = await dispatchTask(projectId, "generate_report", {
           template,
+          report_id: report.id,
+          project_id: projectId,
           regenerate: true,
-        });
+        }, datasetId ?? undefined);
         setGenerateTaskId(taskId);
         setSelectedSectionId(null);
         toast("Re-generating report with new template...", {
@@ -279,7 +334,7 @@ export function Step7Report({
         toast("Failed to re-generate report", { variant: "error" });
       }
     },
-    [projectId, dispatchTask],
+    [projectId, dispatchTask, report, supabase],
   );
 
   const handleSaveSection = useCallback(
