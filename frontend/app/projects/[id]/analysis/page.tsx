@@ -22,6 +22,7 @@ import {
   FlaskConical,
   Info,
   Sparkles,
+  FileText,
 } from "lucide-react";
 import type { Tables } from "@/lib/types/database";
 
@@ -347,6 +348,26 @@ export default function AnalysisPage() {
         {/* Results table */}
         {hasResults && (
           <AnalysisResultsTable results={results} plans={plans} />
+        )}
+
+        {/* Generate Report CTA — shown after results */}
+        {hasResults && !isAnalysisRunning && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="flex flex-col items-center justify-center py-8 sm:flex-row sm:justify-between sm:py-6">
+              <div className="mb-4 text-center sm:mb-0 sm:text-left">
+                <p className="text-sm font-medium">
+                  Ready to generate a report from these results?
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Choose a template and let AI draft your report sections.
+                </p>
+              </div>
+              <Button onClick={() => router.push(`/projects/${projectId}/report`)}>
+                <FileText className="mr-2 h-4 w-4" />
+                Generate Report
+              </Button>
+            </CardContent>
+          </Card>
         )}
       </div>
     </div>
