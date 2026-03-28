@@ -2,7 +2,7 @@
 SurveyAI Analyst — Report Export Service
 
 Exports reports to DOCX and PDF formats.
-DOCX uses python-docx, PDF uses WeasyPrint from styled HTML.
+DOCX uses python-docx, PDF uses ReportLab (pure Python, no system deps).
 
 Storage: files uploaded to Supabase Storage 'reports' bucket.
 Signed URLs (1-hour expiry) stored in report_exports table.
@@ -25,16 +25,7 @@ from db import SupabaseDB
 
 logger = structlog.get_logger()
 
-# WeasyPrint imported lazily to avoid startup cost
-_weasyprint = None
-
-
-def _get_weasyprint():
-    global _weasyprint
-    if _weasyprint is None:
-        import weasyprint
-        _weasyprint = weasyprint
-    return _weasyprint
+# ReportLab for PDF — pure Python, no system library dependencies
 
 
 def export_report(db: SupabaseDB, task_id: str, payload: dict[str, Any]) -> None:
@@ -296,14 +287,81 @@ def _generate_pdf(
     sections: list[dict[str, Any]],
     chart_images: dict[str, bytes],
 ) -> bytes:
-    """Generate PDF using WeasyPrint from styled HTML."""
-    weasyprint = _get_weasyprint()
+    """Generate PDF using ReportLab — pure Python, no system library dependencies."""
+    from io import BytesIO
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, HRFlowable
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
-    template = report.get("template", "donor")
-    html = _build_html(project_name, template, sections, chart_images)
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=2.5 * cm,
+        rightMargin=2.5 * cm,
+        topMargin=2.5 * cm,
+        bottomMargin=2.5 * cm,
+    )
 
-    pdf_doc = weasyprint.HTML(string=html).write_pdf()
-    return pdf_doc
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("title", parent=styles["Title"], fontSize=24, spaceAfter=12, textColor=colors.HexColor("#003366"))
+    h1_style = ParagraphStyle("h1", parent=styles["Heading1"], fontSize=16, textColor=colors.HexColor("#003366"), spaceAfter=8)
+    h2_style = ParagraphStyle("h2", parent=styles["Heading2"], fontSize=13, textColor=colors.HexColor("#004488"), spaceAfter=6)
+    body_style = ParagraphStyle("body", parent=styles["Normal"], fontSize=11, leading=16, spaceAfter=8)
+    placeholder_style = ParagraphStyle("placeholder", parent=styles["Normal"], fontSize=11, textColor=colors.red, fontName="Helvetica-Oblique")
+    review_style = ParagraphStyle("review", parent=styles["Normal"], fontSize=10, textColor=colors.HexColor("#795548"), fontName="Helvetica-Oblique")
+
+    story = []
+
+    # Title page
+    story.append(Spacer(1, 6 * cm))
+    story.append(Paragraph(project_name, title_style))
+    story.append(Paragraph(f"Report Template: {report.get('template', 'donor').title()}", body_style))
+    story.append(Spacer(1, 1 * cm))
+    story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#003366")))
+    story.append(Spacer(1, 2 * cm))
+
+    for section in sorted(sections, key=lambda s: s.get("section_order", 0)):
+        content = section.get("content", "")
+        if not content:
+            continue
+
+        title = section.get("title", section.get("section_type", "").replace("_", " ").title())
+        confidence = section.get("confidence_level", "high")
+        chart_path = section.get("chart_path")
+
+        story.append(Paragraph(title, h1_style))
+        story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#cccccc")))
+        story.append(Spacer(1, 0.3 * cm))
+
+        if confidence == "medium":
+            story.append(Paragraph("⚠ This section may need expert review.", review_style))
+            story.append(Spacer(1, 0.2 * cm))
+
+        # Split content into paragraphs, handle placeholders
+        for para in content.split("\n\n"):
+            para = para.strip()
+            if not para:
+                continue
+            if "[EXPERT INPUT:" in para:
+                story.append(Paragraph(para, placeholder_style))
+            else:
+                story.append(Paragraph(para.replace("\n", "<br/>"), body_style))
+
+        # Embed chart if available
+        if chart_path and chart_path in chart_images:
+            img_data = BytesIO(chart_images[chart_path])
+            img = RLImage(img_data, width=14 * cm, height=9 * cm)
+            story.append(Spacer(1, 0.5 * cm))
+            story.append(img)
+
+        story.append(Spacer(1, 1 * cm))
+
+    doc.build(story)
+    return buffer.getvalue()
 
 
 def _build_html(

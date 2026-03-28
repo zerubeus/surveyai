@@ -138,9 +138,24 @@ def generate_report(db: SupabaseDB, task_id: str, payload: dict[str, Any]) -> No
         })
         section_records.append(record)
 
-    # Step 5: Generate charts for analysis results
+    # Step 5: Generate charts using actual dataset values
     db.update_task_progress(task_id, 25, "Generating charts...")
-    chart_map = _generate_charts(db, analysis_results, project_id, created_by)
+    # Load dataset into DataFrame so charts use real data
+    df_for_charts = None
+    try:
+        dataset = db.get_dataset(dataset_id)
+        if dataset:
+            file_bytes = db.download_file("uploads", dataset.get("original_file_path", ""))
+            if file_bytes:
+                import io as _io
+                ext = (dataset.get("file_type") or "csv").lower()
+                if ext == "csv":
+                    df_for_charts = pd.read_csv(_io.BytesIO(file_bytes))
+                elif ext in ("xlsx", "xls"):
+                    df_for_charts = pd.read_excel(_io.BytesIO(file_bytes))
+    except Exception as e:
+        logger.warning("chart_dataset_load_failed", error=str(e))
+    chart_map = _generate_charts(db, analysis_results, project_id, created_by, df=df_for_charts)
 
     # Step 6: Generate each section
     total_sections = len(section_records)
@@ -510,9 +525,12 @@ def _generate_charts(
     analysis_results: list[dict[str, Any]],
     project_id: str,
     created_by: str,
+    df: "pd.DataFrame | None" = None,
 ) -> dict[str, str]:
     """
-    Generate charts for analysis results using matplotlib.
+    Generate charts for EVERY analysis result using actual dataset values.
+    Every significant (p<0.05) AND non-significant combination gets a chart
+    — the user can decide what to include in the report.
 
     Returns: mapping of analysis_result_id -> chart_id
     """
@@ -524,7 +542,8 @@ def _generate_charts(
             continue
 
         try:
-            chart_data = _create_chart_figure(result)
+            # Pass actual DataFrame so charts use real data
+            chart_data = _create_chart_figure(result, df=df)
             if chart_data is None:
                 continue
 
@@ -580,34 +599,62 @@ def _build_chart_title(result: dict[str, Any]) -> str:
     return f"{dep} by {indep}"
 
 
-def _create_chart_figure(result: dict[str, Any]) -> bytes | None:
+def _create_chart_figure(result: dict[str, Any], df: "pd.DataFrame | None" = None) -> bytes | None:
     """
-    Create a matplotlib chart for an analysis result.
+    Create a matplotlib chart using actual dataset values.
+    Every analysis result gets a chart regardless of p-value significance.
 
     Returns PNG bytes or None if chart cannot be created.
     """
+
     chart_type = _determine_chart_type(result)
-    dep = result.get("dependent_variable") or "Outcome"
-    indep = result.get("independent_variable") or "Variable"
+    dep = result.get("dependent_variable") or result.get("y_variable") or "Outcome"
+    indep = result.get("independent_variable") or result.get("x_variable") or "Variable"
     p_value = result.get("p_value")
     effect_size = result.get("effect_size")
-    sample_size = result.get("sample_size")
-    test_name = result.get("test_name") or "Test"
+    sample_size = result.get("sample_size") or result.get("n_used")
+    test_name = result.get("test_name") or result.get("test_used") or "Test"
+    is_significant = (p_value or 1.0) < 0.05
 
-    # Use descriptive statistics from the result if available
-    desc_stats = result.get("descriptive_stats") or {}
+    fig, ax = plt.subplots(figsize=(9, 6))
 
-    fig, ax = plt.subplots(figsize=(8, 5))
+    drawn = False
+    if df is not None and dep in df.columns and indep in df.columns:
+        # Use actual data
+        plot_df = df[[dep, indep]].dropna()
+        if chart_type == "bar":
+            # Mean of dep grouped by indep
+            grouped = plot_df.groupby(indep)[dep].mean().sort_values(ascending=False)
+            if len(grouped) > 0:
+                colors_list = [COLORS[i % len(COLORS)] for i in range(len(grouped))]
+                ax.bar(grouped.index.astype(str), grouped.values, color=colors_list)
+                ax.set_xlabel(indep)
+                ax.set_ylabel(f"Mean {dep}")
+                ax.set_ylim(bottom=0)
+                drawn = True
+        elif chart_type == "scatter":
+            ax.scatter(plot_df[indep], plot_df[dep], alpha=0.4, color=COLORS[0], s=20)
+            ax.set_xlabel(indep)
+            ax.set_ylabel(dep)
+            drawn = True
+        elif chart_type == "box":
+            groups = [grp[dep].values for _, grp in plot_df.groupby(indep)]
+            labels = [str(k) for k in plot_df[indep].unique()]
+            if groups:
+                ax.boxplot(groups, labels=labels, patch_artist=True,
+                           boxprops=dict(facecolor=COLORS[0], alpha=0.7))
+                ax.set_xlabel(indep)
+                ax.set_ylabel(dep)
+                drawn = True
 
-    if chart_type == "bar" and desc_stats:
-        _draw_bar_chart(ax, desc_stats, dep, indep)
-    elif chart_type == "scatter":
-        _draw_scatter_placeholder(ax, dep, indep)
-    elif chart_type == "box" and desc_stats:
-        _draw_box_chart(ax, desc_stats, dep, indep)
-    else:
-        # Fallback: bar chart with summary stats
-        _draw_summary_bar(ax, result, dep, indep)
+    if not drawn:
+        # Fallback: show descriptive stats from result_details if available
+        desc_stats = result.get("descriptive_stats") or (result.get("result_details") or {}).get("descriptive_stats") or {}
+        if desc_stats and chart_type == "bar":
+            _draw_bar_chart(ax, desc_stats, dep, indep)
+            drawn = True
+        if not drawn:
+            _draw_summary_bar(ax, result, dep, indep)
 
     # Add statistical annotation
     stat_text_parts = [f"{test_name}"]

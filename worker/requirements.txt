@@ -21,8 +21,9 @@ pingouin>=0.5.4
 
 # Report generation
 python-docx>=1.1.0
-WeasyPrint>=62.0
+reportlab>=4.0.0
 python-pptx>=1.0.0
+matplotlib>=3.9.0
 
 # Schema validation
 pydantic>=2.10.0
