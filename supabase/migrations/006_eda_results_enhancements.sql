@@ -9,3 +9,9 @@ ALTER TABLE public.eda_results ADD COLUMN IF NOT EXISTS interpretation JSONB;
 
 -- Enable Realtime for eda_results — live streaming to QualityDashboard
 ALTER PUBLICATION supabase_realtime ADD TABLE public.eda_results;
+
+-- Add missing columns that worker requires
+ALTER TABLE public.eda_results 
+  ADD COLUMN IF NOT EXISTS column_role text,
+  ADD COLUMN IF NOT EXISTS data_type text,
+  ADD COLUMN IF NOT EXISTS interpretation jsonb;
