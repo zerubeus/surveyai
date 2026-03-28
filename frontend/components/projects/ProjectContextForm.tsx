@@ -132,7 +132,10 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
         organization_id: organizationId,
         created_by: user.id,
         name: result.data.name,
-        description: result.data.objective_text,
+        description: JSON.stringify({
+          text: result.data.objective_text,
+          tags: result.data.objective_tags ?? [],
+        }),
         status: "draft",
         research_questions: result.data.research_questions as unknown as Json,
         sampling_method: result.data.sampling_method,

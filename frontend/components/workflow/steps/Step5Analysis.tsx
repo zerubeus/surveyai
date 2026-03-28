@@ -63,6 +63,13 @@ interface Step5AnalysisProps {
 
 function statusBadge(status: AnalysisPlan["status"]) {
   switch (status) {
+    case "completed":
+      return (
+        <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+          <CheckCircle2 className="mr-1 h-3 w-3" />
+          Completed
+        </Badge>
+      );
     case "approved":
       return (
         <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
@@ -152,7 +159,8 @@ export function Step5Analysis({
   const groupedPlans = useMemo(() => groupByRQ(plans), [plans]);
 
   const approvedCount = useMemo(
-    () => plans.filter((p) => p.status === "approved").length,
+    // Count plans that are approved OR already completed (ran successfully)
+    () => plans.filter((p) => p.status === "approved" || p.status === "completed").length,
     [plans],
   );
 
@@ -463,7 +471,7 @@ export function Step5Analysis({
             Analysis Plan
           </h2>
           <span className="text-sm text-muted-foreground">
-            {approvedCount} of {plans.length} approved
+            {approvedCount} of {plans.length} approved or completed
           </span>
         </div>
 
@@ -751,9 +759,9 @@ function PlanRow({ plan, isUpdating, onUpdateStatus }: PlanRowProps) {
         </Collapsible>
       )}
 
-      {/* Approve / Reject buttons */}
+      {/* Approve / Reject buttons — hide for completed plans (already ran) */}
       <div className="flex items-center gap-2 pt-1">
-        {plan.status !== "approved" && (
+        {plan.status !== "approved" && plan.status !== "completed" && (
           <Button
             size="sm"
             variant="outline"
