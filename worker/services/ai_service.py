@@ -33,7 +33,7 @@ def _get_model() -> genai.GenerativeModel:
     The Supabase Vault copy provides a second source-of-truth for auditing.
     """
     api_key = os.environ["GEMINI_API_KEY"]
-    model_name = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview")
+    model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
     genai.configure(api_key=api_key)
     return genai.GenerativeModel(model_name)
 
