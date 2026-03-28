@@ -1,5 +1,5 @@
 """
-SurveyAI Analyst — Consistency Check Service
+Chisquare — Consistency Check Service
 
 Detects logical contradictions, skip logic violations, constraint violations,
 enumerator entropy anomalies, duplicate rows, identifier duplicates,

@@ -1,5 +1,5 @@
 """
-SurveyAI Analyst — Analysis Executor Service
+Chisquare — Analysis Executor Service
 
 Runs all approved analysis plans for a dataset. Performs assumption checks,
 selects final test (with auto-fallback), computes effect sizes, and stores results.

@@ -1,5 +1,5 @@
 """
-SurveyAI Analyst — Cleaning Operation Executor
+Chisquare — Cleaning Operation Executor
 
 Applies a single approved cleaning operation to a dataset,
 creating a new versioned copy.

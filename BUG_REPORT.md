@@ -1,4 +1,4 @@
-# SurveyAI Sprint 11 — Bug Report
+# Chisquare Sprint 11 — Bug Report
 Generated: 2026-03-28
 
 ## 🔴 BUG-01: Dashboard — Raw JSON in project description
@@ -51,7 +51,7 @@ const getDescriptionText = (desc: string | null) => {
 
 ## 🟡 BUG-05: Login page — No visible H1 heading
 **File:** `frontend/app/auth/login/page.tsx`
-**Issue:** The CardTitle contains "SurveyAI Analyst" but it renders as a `<div>`, not an `<h1>`. The page has no semantic H1 for SEO and screen readers.
+**Issue:** The CardTitle contains "Chisquare" but it renders as a `<div>`, not an `<h1>`. The page has no semantic H1 for SEO and screen readers.
 **Fix:** The CardTitle should render as `<h1>` on the login page. Either use `asChild` prop or add an explicit H1.
 
 ---

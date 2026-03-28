@@ -1,5 +1,5 @@
 """
-SurveyAI Analyst — Bias Detection Service
+Chisquare — Bias Detection Service
 
 Detects bias types in survey data using rule-based statistical tests.
 AI explains the implications — never decides the flag.

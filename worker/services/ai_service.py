@@ -1,5 +1,5 @@
 """
-SurveyAI Analyst — AI Service
+Chisquare — AI Service
 
 Uses Google Gemini API (google-genai SDK) for all AI/LLM tasks:
 - Column role suggestion

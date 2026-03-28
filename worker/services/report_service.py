@@ -1,5 +1,5 @@
 """
-SurveyAI Analyst — Report Generation Service
+Chisquare — Report Generation Service
 
 Generates a full report from analysis results using template-specific
 AI drafting with confidence gating.

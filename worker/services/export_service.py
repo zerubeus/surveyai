@@ -1,5 +1,5 @@
 """
-SurveyAI Analyst — Report Export Service
+Chisquare — Report Export Service
 
 Exports reports to DOCX and PDF formats.
 DOCX uses python-docx, PDF uses ReportLab (pure Python, no system deps).

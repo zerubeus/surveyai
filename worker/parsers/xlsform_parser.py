@@ -1,5 +1,5 @@
 """
-SurveyAI Analyst — XLSForm Parser
+Chisquare — XLSForm Parser
 
 Parses XLSForm (.xlsx) files from Kobo Toolbox / ODK Collect.
 XLSForm has three sheets: survey, choices, settings.

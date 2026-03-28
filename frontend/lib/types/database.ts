@@ -1,5 +1,5 @@
 /**
- * SurveyAI Analyst — Database Types
+ * Chisquare — Database Types
  *
  * AUTO-GENERATED PLACEHOLDER — Replace with output of:
  *   npx supabase gen types typescript --local > lib/types/database.ts

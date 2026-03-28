@@ -48,7 +48,7 @@ export default async function DashboardPage() {
                 <Sparkles className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">Welcome to SurveyAI Analyst</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Welcome to Chisquare</h2>
                 <p className="mt-1 text-sm text-gray-600">
                   Upload your survey dataset, answer a few questions about your study, and let the AI plan and run the analysis. You&apos;ll have a publication-ready report in under an hour.
                 </p>

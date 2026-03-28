@@ -1,4 +1,4 @@
-# SurveyAI Analyst — Python Worker Dependencies
+# Chisquare — Python Worker Dependencies
 # Python 3.12+
 
 # Supabase client

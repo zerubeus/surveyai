@@ -1,5 +1,5 @@
 """
-SurveyAI Analyst — Column Role Detection Service
+Chisquare — Column Role Detection Service
 
 AI-primary approach: sends ALL columns in ONE batch call to Gemini,
 then runs heuristic validation to boost confidence on obvious matches.

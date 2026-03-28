@@ -85,7 +85,7 @@ const AUDIENCES = [
 
 const TESTIMONIALS = [
   {
-    quote: "We used to spend 3 weeks on post-survey analysis. SurveyAI compressed that to 2 days, including the donor report.",
+    quote: "We used to spend 3 weeks on post-survey analysis. Chisquare compressed that to 2 days, including the donor report.",
     name: "Amira K.",
     role: "MEL Manager, humanitarian INGO",
     initials: "AK",
@@ -119,7 +119,7 @@ export default function LandingPage() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600">
               <Sparkles className="h-4 w-4 text-white" />
             </div>
-            <span className="text-lg font-bold">SurveyAI Analyst</span>
+            <span className="text-lg font-bold">Chisquare</span>
           </div>
           <div className="hidden items-center gap-6 text-sm md:flex">
             <Link href="#features" className="text-gray-600 hover:text-gray-900">Features</Link>
@@ -163,7 +163,7 @@ export default function LandingPage() {
           </h1>
 
           <p className="mx-auto mb-10 max-w-2xl text-xl text-gray-600">
-            SurveyAI Analyst automates the entire analysis pipeline — EDA, bias detection, statistical testing, and AI-drafted reports — for NGOs, research firms, and academic teams.
+            Chisquare automates the entire analysis pipeline — EDA, bias detection, statistical testing, and AI-drafted reports — for NGOs, research firms, and academic teams.
           </p>
 
           <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
@@ -320,7 +320,7 @@ export default function LandingPage() {
         <div className="mx-auto max-w-3xl text-center">
           <h2 className="mb-4 text-4xl font-bold">Ready to run your analysis?</h2>
           <p className="mb-10 text-xl text-blue-100">
-            Join teams that use SurveyAI to go from raw data to evidence-backed decisions — without the spreadsheet marathon.
+            Join teams that use Chisquare to go from raw data to evidence-backed decisions — without the spreadsheet marathon.
           </p>
           <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link href="/auth/signup">
@@ -347,7 +347,7 @@ export default function LandingPage() {
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600">
                   <Sparkles className="h-3.5 w-3.5 text-white" />
                 </div>
-                <span className="font-bold">SurveyAI Analyst</span>
+                <span className="font-bold">Chisquare</span>
               </div>
               <p className="text-sm text-gray-500 max-w-xs">
                 AI-powered survey analysis for NGOs, research firms, and academic teams.
@@ -363,7 +363,7 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="flex flex-col items-center justify-between gap-4 border-t pt-6 text-xs text-gray-500 md:flex-row">
-            <p>© {new Date().getFullYear()} SurveyAI Analyst. All rights reserved.</p>
+            <p>© {new Date().getFullYear()} Chisquare. All rights reserved.</p>
             <div className="flex items-center gap-1.5">
               <Lock className="h-3 w-3" />
               <span>GDPR-ready · Data stays in your region</span>

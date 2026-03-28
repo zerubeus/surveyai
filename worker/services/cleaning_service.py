@@ -1,5 +1,5 @@
 """
-SurveyAI Analyst — Cleaning Suggestion Generator
+Chisquare — Cleaning Suggestion Generator
 
 Generates deterministic cleaning suggestions based on EDA results,
 then enriches them with AI reasoning and priority ranking.

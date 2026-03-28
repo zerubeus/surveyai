@@ -1,12 +1,12 @@
 #!/bin/bash
-# SurveyAI Worker — Start persistent background worker
+# Chisquare Worker — Start persistent background worker
 # Usage: ./start-worker.sh
 
 set -e
 
 WORKER_DIR="/root/projects/surveyai/worker"
-LOG_FILE="/tmp/surveyai-worker.log"
-PID_FILE="/tmp/surveyai-worker.pid"
+LOG_FILE="/tmp/chisquare-worker.log"
+PID_FILE="/tmp/chisquare-worker.pid"
 
 # Kill existing worker if running
 if [ -f "$PID_FILE" ]; then
@@ -19,7 +19,7 @@ if [ -f "$PID_FILE" ]; then
   rm -f "$PID_FILE"
 fi
 
-echo "Starting SurveyAI worker..."
+echo "Starting Chisquare worker..."
 cd "$WORKER_DIR"
 
 # Source the env file

@@ -1,5 +1,5 @@
 """
-SurveyAI Analyst — Instrument Parsing Service
+Chisquare — Instrument Parsing Service
 
 Orchestrates instrument file parsing:
 1. Downloads file from Supabase Storage

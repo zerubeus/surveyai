@@ -1,5 +1,5 @@
 """
-SurveyAI Analyst — EDA Service
+Chisquare — EDA Service
 
 Survey-aware Exploratory Data Analysis engine.
 Profiles every column respecting confirmed column roles and data types.

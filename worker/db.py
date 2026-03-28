@@ -1,5 +1,5 @@
 """
-SurveyAI Analyst — Data Access Layer
+Chisquare — Data Access Layer
 
 All Supabase operations go through this module.
 Uses service_role key (bypasses RLS) for worker operations.

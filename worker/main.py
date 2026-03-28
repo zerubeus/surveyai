@@ -1,5 +1,5 @@
 """
-SurveyAI Analyst — Python Worker Service
+Chisquare — Python Worker Service
 
 Polls the tasks table for pending work, executes heavy computation
 (EDA, cleaning, analysis, report generation), and updates results.

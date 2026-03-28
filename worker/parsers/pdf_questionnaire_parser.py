@@ -1,5 +1,5 @@
 """
-SurveyAI Analyst — PDF/Word Questionnaire Parser
+Chisquare — PDF/Word Questionnaire Parser
 
 Uses text extraction (pypdf for PDF, python-docx for DOCX) followed by
 Gemini AI to identify question structure from unstructured document text.

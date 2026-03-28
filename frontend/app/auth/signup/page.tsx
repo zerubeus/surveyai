@@ -130,7 +130,7 @@ export default function SignupPage() {
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 shadow-sm">
               <Sparkles className="h-5 w-5 text-white" />
             </div>
-            <span className="text-lg font-bold text-gray-900">SurveyAI Analyst</span>
+            <span className="text-lg font-bold text-gray-900">Chisquare</span>
           </Link>
         </div>
 

@@ -1,5 +1,5 @@
 """
-SurveyAI Analyst — EDA Interpretation Service
+Chisquare — EDA Interpretation Service
 
 Calls Gemini ONCE with ALL column stats, bias flags, and consistency issues.
 Returns structured interpretation (Option 1 — full context).

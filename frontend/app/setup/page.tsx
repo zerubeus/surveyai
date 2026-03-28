@@ -32,7 +32,7 @@ const SETUP_STEPS = [
     bg: "bg-blue-50",
     content: (
       <div className="space-y-3 text-sm text-gray-700">
-        <p>Go to <Link href="/auth/signup" className="text-blue-600 hover:underline font-medium">surveyai/auth/signup</Link> and register with your work email.</p>
+        <p>Go to <Link href="/auth/signup" className="text-blue-600 hover:underline font-medium">chisquare/auth/signup</Link> and register with your work email.</p>
         <div className="rounded-lg bg-blue-50 p-3">
           <p className="font-medium text-blue-800 mb-1">📧 Email confirmation required</p>
           <p className="text-blue-700">Check your inbox for a confirmation link. Click it before signing in.</p>
@@ -224,7 +224,7 @@ const SETUP_STEPS = [
 
 const FAQS = [
   {
-    q: "What statistical tests does SurveyAI support?",
+    q: "What statistical tests does Chisquare support?",
     a: "Linear regression (OLS), logistic regression, Spearman, Pearson, Kendall tau, Point-biserial, t-test, Welch's t-test, One-way ANOVA, Mann-Whitney U, Kruskal-Wallis H, moderation analysis, mediation analysis (Sobel).",
   },
   {
@@ -236,7 +236,7 @@ const FAQS = [
     a: "Datasets: CSV, XLSX, XLS. Questionnaires/instruments: Word (.docx), PDF, XLSForm (.xlsx). Reports exported as DOCX and PDF.",
   },
   {
-    q: "How does SurveyAI handle Likert scale data?",
+    q: "How does Chisquare handle Likert scale data?",
     a: "Likert scales (1–5, 1–7) are treated as ordinal. The AI automatically selects non-parametric tests (Spearman, Kruskal-Wallis, Mann-Whitney). You can also add an OLS regression as a sensitivity analysis.",
   },
   {
@@ -309,7 +309,7 @@ export default function SetupPage() {
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600">
               <Sparkles className="h-3.5 w-3.5 text-white" />
             </div>
-            <span className="font-bold">SurveyAI Analyst</span>
+            <span className="font-bold">Chisquare</span>
           </Link>
           <div className="flex items-center gap-3">
             <Link href="/auth/login">

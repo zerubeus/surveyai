@@ -1,7 +1,7 @@
-# SurveyAI — Advanced Analytics + UI Improvements
+# Chisquare — Advanced Analytics + UI Improvements
 
 ## Context
-SurveyAI has a Python worker at `/root/projects/surveyai/worker/` and a Next.js frontend at `/root/projects/surveyai/frontend/`.
+Chisquare has a Python worker at `/root/projects/surveyai/worker/` and a Next.js frontend at `/root/projects/surveyai/frontend/`.
 
 Current analysis tests available: t_test, mann_whitney, anova, kruskal_wallis, chi_square, fishers_exact, pearson, spearman, logistic_regression.
 

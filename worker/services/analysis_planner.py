@@ -1,5 +1,5 @@
 """
-SurveyAI Analyst — Analysis Planner Service
+Chisquare — Analysis Planner Service
 
 Reads project research questions + column roles, calls Gemini to propose
 analysis pairs (variable X × variable Y + test type). User reviews before running.

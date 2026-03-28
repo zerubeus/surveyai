@@ -1,4 +1,4 @@
-# SurveyAI E2E Test Report
+# Chisquare E2E Test Report
 Generated: 2026-03-28T15:37:05.060Z
 
 ## Summary

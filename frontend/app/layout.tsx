@@ -5,7 +5,7 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "SurveyAI Analyst",
+  title: "Chisquare",
   description:
     "AI-powered survey data analysis platform for NGOs and research firms",
 };

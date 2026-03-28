@@ -3,7 +3,7 @@ import { Lock, Shield, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 const LAST_UPDATED = "28 March 2026";
-const CONTACT_EMAIL = "privacy@surveyai.app";
+const CONTACT_EMAIL = "privacy@chisquare.app";
 
 export default function PrivacyPage() {
   return (
@@ -15,7 +15,7 @@ export default function PrivacyPage() {
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600">
               <Sparkles className="h-3.5 w-3.5 text-white" />
             </div>
-            <span className="font-bold">SurveyAI Analyst</span>
+            <span className="font-bold">Chisquare</span>
           </Link>
           <div className="flex items-center gap-4 text-sm text-gray-600">
             <Link href="/landing" className="hover:text-gray-900">Home</Link>
@@ -37,7 +37,7 @@ export default function PrivacyPage() {
             <div className="flex items-start gap-2">
               <Shield className="mt-0.5 h-4 w-4 flex-shrink-0" />
               <p>
-                SurveyAI Analyst is built for organisations that handle sensitive survey data — including data collected from vulnerable populations. We take data protection seriously and are committed to GDPR compliance.
+                Chisquare is built for organisations that handle sensitive survey data — including data collected from vulnerable populations. We take data protection seriously and are committed to GDPR compliance.
               </p>
             </div>
           </div>
@@ -76,7 +76,7 @@ export default function PrivacyPage() {
             <h2 className="text-xl font-bold mb-3">1. Who we are</h2>
             <div className="text-sm text-gray-700 space-y-2">
               <p>
-                <strong>SurveyAI Analyst</strong> ("the Platform", "we", "us") is an AI-powered survey data analysis platform operated for NGOs, research firms, academic institutions, and policy units.
+                <strong>Chisquare</strong> ("the Platform", "we", "us") is an AI-powered survey data analysis platform operated for NGOs, research firms, academic institutions, and policy units.
               </p>
               <p>
                 For the purposes of the UK and EU General Data Protection Regulation (GDPR), we act as a <strong>data controller</strong> for account and usage data, and as a <strong>data processor</strong> for survey datasets you upload.
@@ -347,7 +347,7 @@ export default function PrivacyPage() {
 
         {/* Footer */}
         <div className="mt-16 border-t pt-8 text-center text-sm text-gray-500">
-          <p>© {new Date().getFullYear()} SurveyAI Analyst · <Link href="/landing" className="text-blue-600 hover:underline">Home</Link> · <Link href="/setup" className="text-blue-600 hover:underline">Setup Guide</Link></p>
+          <p>© {new Date().getFullYear()} Chisquare · <Link href="/landing" className="text-blue-600 hover:underline">Home</Link> · <Link href="/setup" className="text-blue-600 hover:underline">Setup Guide</Link></p>
         </div>
       </div>
     </div>

@@ -1,5 +1,5 @@
 """
-SurveyAI Analyst — Analysis Interpreter Service
+Chisquare — Analysis Interpreter Service
 
 Calls Gemini to interpret statistical results in context of the study.
 
