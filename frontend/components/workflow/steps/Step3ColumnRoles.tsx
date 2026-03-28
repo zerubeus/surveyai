@@ -327,10 +327,11 @@ export function Step3ColumnRoles({
       await confirmAll();
 
       // 2. Dispatch 3 analysis tasks in parallel
+      const edaPayload = { dataset_id: dataset.id, project_id: project.id };
       const taskPromises = [
-        dispatchTask(project.id, "run_eda", {}, dataset.id),
-        dispatchTask(project.id, "run_consistency_checks", {}, dataset.id),
-        dispatchTask(project.id, "run_bias_detection", {}, dataset.id),
+        dispatchTask(project.id, "run_eda", edaPayload, dataset.id),
+        dispatchTask(project.id, "run_consistency_checks", edaPayload, dataset.id),
+        dispatchTask(project.id, "run_bias_detection", edaPayload, dataset.id),
       ];
       await Promise.all(taskPromises);
 
