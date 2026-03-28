@@ -24,8 +24,11 @@ import type { Json } from "@/lib/types/database";
 const ACCEPTED_TYPES: Record<string, string> = {
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
   "application/pdf": "pdf",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-    "docx",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  // Some browsers/OS report .docx with these legacy MIME types
+  "application/msword": "docx",
+  "application/vnd.ms-word": "docx",
+  "application/x-msword": "docx",
 };
 const ACCEPTED_EXTENSIONS = ".xlsx,.pdf,.docx";
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
@@ -85,14 +88,15 @@ export function InstrumentUploader({ projectId }: InstrumentUploaderProps) {
     }
   }
 
+  // Always return the canonical MIME type accepted by Supabase Storage.
+  // File extension is the source of truth — browser-reported file.type can be wrong.
   const getMimeType = (file: File): string | null => {
-    if (ACCEPTED_TYPES[file.type]) return file.type;
     const ext = file.name.split(".").pop()?.toLowerCase();
-    if (ext === "xlsx")
-      return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    if (ext === "xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     if (ext === "pdf") return "application/pdf";
-    if (ext === "docx")
-      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    if (ext === "docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    // Fallback: try browser-reported type if it's in our accepted list
+    if (ACCEPTED_TYPES[file.type]) return file.type;
     return null;
   };
 
