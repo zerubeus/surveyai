@@ -5,6 +5,7 @@ import {
   Check,
   Lock,
   AlertTriangle,
+  Loader2,
   FileText,
   Upload,
   Columns,
@@ -26,13 +27,19 @@ const STEPS = [
   { num: 7, name: "Report", icon: FileOutput },
 ] as const;
 
+interface ActiveTask {
+  status: string;
+  progress: number;
+}
+
 interface StepBarProps {
   projectId: string;
   currentStep: number;
   pipelineStatus: PipelineStatus;
+  activeTasksByStep?: Record<number, ActiveTask>;
 }
 
-export function StepBar({ projectId, currentStep, pipelineStatus }: StepBarProps) {
+export function StepBar({ projectId, currentStep, pipelineStatus, activeTasksByStep }: StepBarProps) {
   return (
     <nav className="w-full overflow-x-auto">
       <ol className="flex items-center gap-0">
@@ -82,6 +89,18 @@ export function StepBar({ projectId, currentStep, pipelineStatus }: StepBarProps
                   {status === "active" && isCurrent && (
                     <div className="absolute inset-0 animate-ping rounded-full border-2 border-blue-400 opacity-30" />
                   )}
+                  {/* Task running badge */}
+                  {activeTasksByStep?.[step.num] &&
+                    (activeTasksByStep[step.num].status === "running" ||
+                      activeTasksByStep[step.num].status === "claimed" ||
+                      activeTasksByStep[step.num].status === "pending") && (
+                      <span
+                        className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-white"
+                        title="Analysing..."
+                      >
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      </span>
+                    )}
                 </div>
                 {/* Label — hidden on mobile */}
                 <span
