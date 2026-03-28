@@ -24,6 +24,7 @@ interface QualityCardProps {
     description?: string;
     details?: Record<string, Json>;
   }>;
+  inline?: boolean; // when true, renders without outer Card wrapper (for accordion use)
 }
 
 const ROLE_COLORS: Record<string, string> = {
@@ -105,17 +106,14 @@ export function QualityCard({
   qualityScore,
   profile,
   issues,
+  inline = false,
 }: QualityCardProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(inline); // auto-expand when inline (inside accordion)
   const score = qualityScore ?? 0;
   const issueCount = issues.length;
 
-  return (
-    <Card
-      className="cursor-pointer transition-shadow hover:shadow-md"
-      onClick={() => setExpanded(!expanded)}
-    >
-      <CardContent className="p-4">
+  const content = (
+    <div className={inline ? "" : "p-4"}>
         {/* Header row */}
         <div className="flex items-center gap-3">
           {expanded ? (
@@ -243,6 +241,18 @@ export function QualityCard({
             )}
           </div>
         )}
+      </div>
+  );
+
+  if (inline) return content;
+
+  return (
+    <Card
+      className="cursor-pointer transition-shadow hover:shadow-md"
+      onClick={() => setExpanded(!expanded)}
+    >
+      <CardContent className="p-4">
+        {content}
       </CardContent>
     </Card>
   );

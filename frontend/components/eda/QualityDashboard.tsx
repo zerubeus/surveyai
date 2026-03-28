@@ -17,6 +17,12 @@ import {
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
   PlayCircle,
   AlertTriangle,
   AlertCircle,
@@ -471,40 +477,64 @@ export function QualityDashboard({ datasetId, projectId }: QualityDashboardProps
         </Card>
       )}
 
-      {/* Column profiles */}
+      {/* Column profiles — Accordion */}
       {columnProfiles.length > 0 && (
         <div>
           <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
             <BarChart3 className="h-4 w-4" />
             Column Quality ({columnProfiles.length})
           </h4>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Accordion type="multiple" className="rounded-lg border">
             {columnProfiles
-              .sort(
-                (a, b) => (a.quality_score ?? 100) - (b.quality_score ?? 100),
-              )
+              .sort((a, b) => (a.quality_score ?? 100) - (b.quality_score ?? 100))
               .map((result) => {
                 const colName = result.column_name ?? "?";
                 const mapping = mappingsByColumn[colName];
+                const score = result.quality_score ?? 100;
+                const scoreColor =
+                  score >= 80 ? "text-green-600" : score >= 60 ? "text-yellow-600" : "text-red-600";
+                const issues = (result.issues as Array<{type?: string; severity?: string; description?: string}>) ?? [];
+                const criticalIssues = issues.filter(i => i.severity === "critical").length;
                 return (
-                  <QualityCard
-                    key={result.id}
-                    columnName={colName}
-                    role={mapping?.role ?? null}
-                    dataType={mapping?.data_type ?? null}
-                    qualityScore={result.quality_score}
-                    profile={result.profile as Record<string, Json> | null}
-                    issues={
-                      (result.issues as Array<{
-                        type?: string;
-                        severity?: string;
-                        description?: string;
-                      }>) ?? []
-                    }
-                  />
+                  <AccordionItem key={result.id} value={result.id ?? colName}>
+                    <AccordionTrigger className="px-4 hover:no-underline">
+                      <div className="flex flex-1 items-center gap-3 text-left">
+                        <span className={`text-sm font-mono font-semibold ${scoreColor} w-8 shrink-0`}>
+                          {score}
+                        </span>
+                        <span className="font-medium">{colName}</span>
+                        {mapping?.role && (
+                          <Badge variant="outline" className="text-xs font-normal">
+                            {mapping.role}
+                          </Badge>
+                        )}
+                        {criticalIssues > 0 && (
+                          <Badge variant="destructive" className="ml-auto mr-4 text-xs">
+                            {criticalIssues} critical
+                          </Badge>
+                        )}
+                        {issues.length > 0 && criticalIssues === 0 && (
+                          <Badge variant="secondary" className="ml-auto mr-4 text-xs">
+                            {issues.length} issue{issues.length > 1 ? "s" : ""}
+                          </Badge>
+                        )}
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-4">
+                      <QualityCard
+                        columnName={colName}
+                        role={mapping?.role ?? null}
+                        dataType={mapping?.data_type ?? null}
+                        qualityScore={result.quality_score}
+                        profile={result.profile as Record<string, Json> | null}
+                        issues={issues}
+                        inline
+                      />
+                    </AccordionContent>
+                  </AccordionItem>
                 );
               })}
-          </div>
+          </Accordion>
         </div>
       )}
 
