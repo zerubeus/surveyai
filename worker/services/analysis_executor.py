@@ -233,7 +233,7 @@ def _run_single_analysis(
     fallback_used = final_test != plan["selected_test"]
 
     # Execute the test
-    test_result = _execute_test(df, dep_var, indep_var, final_test, weight_col)
+    test_result = _execute_test(df, dep_var, indep_var, final_test, weight_col, plan)
 
     # Compute effect size (S2: required)
     es_name, es_value, es_interp = _compute_effect_size(
@@ -386,6 +386,7 @@ def _execute_test(
     indep_var: str,
     test_name: str,
     weight_col: str | None,
+    plan: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Execute a statistical test and return results dict."""
     mask = df[dep_var].notna() & df[indep_var].notna()
@@ -453,6 +454,39 @@ def _execute_test(
     if test_name == "logistic_regression":
         return _run_logistic_regression(sub, dep_var, indep_var)
 
+    if test_name == "linear_regression":
+        control_vars = (plan or {}).get("control_variables") or []
+        return _run_linear_regression(df, dep_var, indep_var, control_vars)
+
+    if test_name == "welchs_t":
+        groups = _get_groups(df, dep_var, indep_var)
+        if len(groups) < 2:
+            raise ValueError("Welch t-test requires at least 2 groups")
+        stat, p = stats.ttest_ind(groups[0], groups[1], equal_var=False)
+        return {"statistic": float(stat), "p_value": float(p), "df": float(len(groups[0]) + len(groups[1]) - 2)}
+
+    if test_name == "kendall_tau":
+        x = pd.to_numeric(sub[indep_var], errors="coerce").dropna()
+        y = pd.to_numeric(sub[dep_var], errors="coerce").dropna()
+        common = x.index.intersection(y.index)
+        tau, p = stats.kendalltau(x.loc[common], y.loc[common])
+        return {"statistic": float(tau), "p_value": float(p), "n": len(common)}
+
+    if test_name == "point_biserial":
+        x = pd.to_numeric(sub[indep_var], errors="coerce").dropna()
+        y = pd.to_numeric(sub[dep_var], errors="coerce").dropna()
+        common = x.index.intersection(y.index)
+        r, p = stats.pointbiserialr(x.loc[common], y.loc[common])
+        return {"statistic": float(r), "p_value": float(p), "n": len(common)}
+
+    if test_name == "moderation_analysis":
+        moderator = (plan or {}).get("control_variables", [None])[0]
+        return _run_moderation_analysis(df, dep_var, indep_var, moderator)
+
+    if test_name == "mediation_analysis":
+        mediator = (plan or {}).get("control_variables", [None])[0]
+        return _run_mediation_analysis(df, dep_var, indep_var, mediator)
+
     raise ValueError(f"Unknown test: {test_name}")
 
 
@@ -487,6 +521,153 @@ def _run_logistic_regression(
             "upper": round(float(model.conf_int().iloc[-1, 1]), 4),
             "level": 0.95,
         },
+    }
+
+
+def _run_linear_regression(
+    df: pd.DataFrame,
+    dep_var: str,
+    indep_var: str,
+    control_vars: list[str],
+) -> dict[str, Any]:
+    """Run OLS multiple linear regression using statsmodels."""
+    try:
+        import statsmodels.api as sm
+    except ImportError:
+        raise RuntimeError("statsmodels required for linear regression")
+
+    all_vars = [indep_var] + [c for c in (control_vars or []) if c in df.columns]
+    cols = [dep_var] + all_vars
+    sub = df[cols].dropna()
+
+    y = pd.to_numeric(sub[dep_var], errors="coerce").dropna()
+    X_raw = sub.loc[y.index, all_vars].apply(pd.to_numeric, errors="coerce").dropna()
+    y = y.loc[X_raw.index]
+    X = sm.add_constant(X_raw)
+
+    model = sm.OLS(y, X).fit()
+    ci = model.conf_int()
+
+    coefficients = {}
+    for var in X.columns:
+        coefficients[str(var)] = {
+            "estimate": round(float(model.params[var]), 4),
+            "std_error": round(float(model.bse[var]), 4),
+            "t_value": round(float(model.tvalues[var]), 4),
+            "p_value": round(float(model.pvalues[var]), 4),
+            "ci_lower": round(float(ci.loc[var, 0]), 4),
+            "ci_upper": round(float(ci.loc[var, 1]), 4),
+        }
+
+    return {
+        "statistic": round(float(model.fvalue), 4),
+        "p_value": round(float(model.f_pvalue), 4),
+        "r_squared": round(float(model.rsquared), 4),
+        "adj_r_squared": round(float(model.rsquared_adj), 4),
+        "df_model": int(model.df_model),
+        "df_residual": int(model.df_resid),
+        "n": int(len(y)),
+        "coefficients": coefficients,
+        "durbin_watson": round(float(sm.stats.stattools.durbin_watson(model.resid)), 4),
+    }
+
+
+def _run_moderation_analysis(
+    df: pd.DataFrame,
+    dep_var: str,
+    indep_var: str,
+    moderator: str | None,
+) -> dict[str, Any]:
+    """Run moderation analysis: X * Z → Y (OLS with interaction term)."""
+    try:
+        import statsmodels.api as sm
+    except ImportError:
+        raise RuntimeError("statsmodels required for moderation analysis")
+
+    if not moderator or moderator not in df.columns:
+        raise ValueError(f"Moderator variable '{moderator}' not found in dataset")
+
+    cols = [dep_var, indep_var, moderator]
+    sub = df[cols].apply(pd.to_numeric, errors="coerce").dropna()
+
+    y = sub[dep_var]
+    x = sub[indep_var]
+    z = sub[moderator]
+
+    # Mean-center for interpretability
+    x_c = x - x.mean()
+    z_c = z - z.mean()
+    interaction = x_c * z_c
+
+    X = sm.add_constant(pd.DataFrame({indep_var: x_c, moderator: z_c, "interaction": interaction}))
+    model = sm.OLS(y, X).fit()
+
+    return {
+        "statistic": round(float(model.fvalue), 4),
+        "p_value": round(float(model.f_pvalue), 4),
+        "r_squared": round(float(model.rsquared), 4),
+        "adj_r_squared": round(float(model.rsquared_adj), 4),
+        "n": int(len(y)),
+        "interaction_coef": round(float(model.params.get("interaction", 0)), 4),
+        "interaction_p": round(float(model.pvalues.get("interaction", 1)), 4),
+        "interaction_significant": float(model.pvalues.get("interaction", 1)) < 0.05,
+        "coefficients": {
+            indep_var: round(float(model.params.get(indep_var, 0)), 4),
+            moderator: round(float(model.params.get(moderator, 0)), 4),
+            "interaction": round(float(model.params.get("interaction", 0)), 4),
+        },
+    }
+
+
+def _run_mediation_analysis(
+    df: pd.DataFrame,
+    dep_var: str,
+    indep_var: str,
+    mediator: str | None,
+) -> dict[str, Any]:
+    """Run simple mediation using Sobel test: X → M → Y."""
+    from math import sqrt
+
+    if not mediator or mediator not in df.columns:
+        raise ValueError(f"Mediator variable '{mediator}' not found in dataset")
+
+    cols = [dep_var, indep_var, mediator]
+    sub = df[cols].apply(pd.to_numeric, errors="coerce").dropna()
+    n = len(sub)
+
+    x = sub[indep_var]
+    m = sub[mediator]
+    y = sub[dep_var]
+
+    # a-path: X → M
+    a_stat, a_p = stats.pearsonr(x, m)
+    a_se = sqrt((1 - a_stat**2) / (n - 2))
+
+    # b-path: M → Y (controlling for X)
+    # Use partial correlation via scipy
+    b_stat, b_p = stats.pearsonr(m, y)
+    b_se = sqrt((1 - b_stat**2) / (n - 2))
+
+    # Sobel test
+    indirect = a_stat * b_stat
+    sobel_se = sqrt((a_stat**2 * b_se**2) + (b_stat**2 * a_se**2))
+    sobel_z = indirect / sobel_se if sobel_se > 0 else 0.0
+    # Two-tailed p from normal distribution
+    sobel_p = float(2 * (1 - stats.norm.cdf(abs(sobel_z))))
+
+    # Total effect: X → Y directly
+    total_r, total_p = stats.pearsonr(x, y)
+
+    return {
+        "statistic": round(sobel_z, 4),
+        "p_value": round(sobel_p, 4),
+        "indirect_effect": round(indirect, 4),
+        "a_path": {"r": round(a_stat, 4), "p_value": round(a_p, 4)},
+        "b_path": {"r": round(b_stat, 4), "p_value": round(b_p, 4)},
+        "total_effect": {"r": round(total_r, 4), "p_value": round(total_p, 4)},
+        "n": n,
+        "mediator": mediator,
+        "proportion_mediated": round(indirect / total_r, 4) if abs(total_r) > 0.01 else None,
     }
 
 
@@ -555,12 +736,41 @@ def _compute_effect_size(
     if test_name == "logistic_regression":
         # Odds ratio
         odds = test_result.get("odds_ratios", {})
-        # Get the predictor's odds ratio (skip constant)
         or_vals = [v for k, v in odds.items() if k != "const"]
         if or_vals:
             or_val = or_vals[0]
             return "odds_ratio", float(or_val), _interpret_odds_ratio(float(or_val))
         return "odds_ratio", 1.0, "negligible"
+
+    if test_name == "linear_regression":
+        r_sq = test_result.get("r_squared", 0.0)
+        # Cohen's f² for regression
+        f2 = float(r_sq) / (1 - float(r_sq)) if float(r_sq) < 1 else 0.0
+        interpretation = "small" if f2 >= 0.02 else "negligible"
+        if f2 >= 0.15:
+            interpretation = "medium"
+        if f2 >= 0.35:
+            interpretation = "large"
+        return "f_squared", round(f2, 4), interpretation
+
+    if test_name in ("kendall_tau", "point_biserial"):
+        r = test_result.get("statistic", 0)
+        r_sq = float(r) ** 2 if r is not None else 0.0
+        return "r_squared", round(r_sq, 4), _interpret_r_squared(r_sq)
+
+    if test_name in ("moderation_analysis", "mediation_analysis"):
+        r_sq = test_result.get("r_squared", 0.0) or abs(test_result.get("indirect_effect", 0.0))
+        return "effect", round(float(r_sq), 4), ("medium" if float(r_sq) > 0.06 else "small")
+
+    if test_name == "welchs_t":
+        # Cohen's d for Welch's t
+        groups = _get_groups(df, dep_var, indep_var)
+        if len(groups) >= 2:
+            g1, g2 = groups[0], groups[1]
+            pooled_std = float(np.sqrt((g1.std() ** 2 + g2.std() ** 2) / 2))
+            d = abs(float(g1.mean()) - float(g2.mean())) / pooled_std if pooled_std > 0 else 0.0
+            return "cohens_d", round(d, 4), _interpret_cohens_d(d)
+        return "cohens_d", 0.0, "negligible"
 
     return "unknown", 0.0, "unknown"
 

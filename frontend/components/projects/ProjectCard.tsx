@@ -36,6 +36,14 @@ function parseDescription(raw: string | null): { text: string | null; tags: stri
   return { text: raw, tags: [] };
 }
 
+/** Count completed steps from pipeline_status object */
+function countCompletedSteps(pipelineStatus: unknown): number {
+  if (!pipelineStatus || typeof pipelineStatus !== "object") return 0;
+  return Object.values(pipelineStatus as Record<string, string>).filter(
+    (v) => v === "completed"
+  ).length;
+}
+
 export function ProjectCard({ project }: ProjectCardProps) {
   const statusInfo = STATUS_LABELS[project.status] ?? {
     label: project.status,
@@ -43,6 +51,13 @@ export function ProjectCard({ project }: ProjectCardProps) {
   };
 
   const { text: descText, tags } = parseDescription(project.description);
+
+  const totalSteps = 7;
+  const completedSteps = countCompletedSteps(
+    (project as unknown as { pipeline_status?: unknown }).pipeline_status
+  );
+  const currentStep = (project as unknown as { current_step?: number }).current_step ?? 1;
+  const progressPercent = Math.round((completedSteps / totalSteps) * 100);
 
   return (
     <Link href={`/projects/${project.id}`}>
@@ -66,6 +81,23 @@ export function ProjectCard({ project }: ProjectCardProps) {
               ))}
             </div>
           )}
+
+          {/* Workflow progress bar */}
+          <div className="mb-2 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                Step {currentStep} of {totalSteps}
+              </span>
+              <span className="text-xs text-muted-foreground">{progressPercent}%</span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-300"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          </div>
+
           <p className="text-xs text-muted-foreground">
             Created {new Date(project.created_at).toLocaleDateString()}
           </p>

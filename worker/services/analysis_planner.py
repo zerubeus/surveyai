@@ -32,6 +32,13 @@ VALID_TEST_TYPES = {
     "pearson",
     "spearman",
     "logistic_regression",
+    # Advanced analytics (added Sprint 11)
+    "linear_regression",
+    "welchs_t",
+    "kendall_tau",
+    "point_biserial",
+    "moderation_analysis",
+    "mediation_analysis",
 }
 
 # Non-parametric tests (safe for Likert/ordinal)
@@ -41,6 +48,8 @@ NON_PARAMETRIC_TESTS = {
     "chi_square",
     "fishers_exact",
     "spearman",
+    "kendall_tau",
+    "point_biserial",
 }
 
 
@@ -237,6 +246,15 @@ def _build_planner_prompt(
         "- For categorical outcome + categorical predictor: chi_square (fallback: fishers_exact)\n"
         "- For continuous × continuous: pearson (fallback: spearman)\n"
         "- For binary outcome + multiple predictors: logistic_regression\n"
+        "- For continuous outcome + multiple continuous predictors: linear_regression\n"
+        "  (put primary predictor in independent_variable, covariates in control_variables)\n"
+        "- For testing if Z moderates X→Y relationship: moderation_analysis\n"
+        "  (put moderator in control_variables[0])\n"
+        "- For testing X→M→Y indirect effect: mediation_analysis\n"
+        "  (put mediator in control_variables[0])\n"
+        "- For binary + continuous correlation: point_biserial\n"
+        "- For rank correlation (robust to outliers): kendall_tau or spearman\n"
+        "- For unequal variance two-group comparison: welchs_t\n"
         "- Return the array directly, not wrapped in an object.\n"
     )
 

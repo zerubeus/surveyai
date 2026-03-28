@@ -171,6 +171,7 @@ export function Step5Analysis({
 
   const hasPlans = plans.length > 0;
   const canRunAnalysis = approvedCount > 0;
+  const allCompleted = plans.length > 0 && plans.every((p) => p.status === "completed");
 
   /* ---------- Handlers ---------- */
 
@@ -463,6 +464,30 @@ export function Step5Analysis({
         hasWeightColumn={hasWeightColumn}
         weightColumnName={weightColumnName}
       />
+
+      {/* CTA when all plans already completed */}
+      {allCompleted && (
+        <Card className="border-green-200 bg-green-50">
+          <CardContent className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+              <div>
+                <p className="font-medium text-green-800">Analysis complete</p>
+                <p className="text-sm text-green-700">
+                  All {plans.length} test{plans.length > 1 ? "s" : ""} ran successfully. Results are ready.
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={() => router.push(`/projects/${projectId}/step/6`)}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              View Results
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Top action bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">

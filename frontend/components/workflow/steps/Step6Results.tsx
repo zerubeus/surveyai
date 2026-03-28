@@ -26,11 +26,15 @@ import {
   ArrowRight,
   BarChart3,
   Check,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Loader2,
   Pencil,
   Shield,
+  TrendingUp,
+  XCircle,
+  MinusCircle,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import type { Tables, Json } from "@/lib/types/database";
@@ -230,6 +234,19 @@ export function Step6Results({
       results.filter((r) => r.p_value !== null && r.p_value < 0.05).length,
     [results],
   );
+
+  /** Traffic light per RQ: green=significant found, yellow=mixed, red=none */
+  const rqTrafficLights = useMemo((): Map<string, "green" | "yellow" | "red"> => {
+    const map = new Map<string, "green" | "yellow" | "red">();
+    for (const group of groupedResults) {
+      const total = group.items.length;
+      const sig = group.items.filter((i) => i.result.p_value !== null && i.result.p_value < 0.05).length;
+      if (sig === total && total > 0) map.set(group.rqText, "green");
+      else if (sig > 0) map.set(group.rqText, "yellow");
+      else map.set(group.rqText, "red");
+    }
+    return map;
+  }, [groupedResults]);
 
   /* ---------- Handlers ---------- */
 
@@ -431,6 +448,104 @@ export function Step6Results({
               </span>
             </div>
             <Progress value={taskProgress.progress} className="h-1.5" />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Summary Insights Panel */}
+      {results.length > 0 && (
+        <Card className="border-blue-200 bg-blue-50/50">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <TrendingUp className="h-4 w-4 text-blue-600" />
+              Summary Insights
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Significance counts */}
+            <div className="flex flex-wrap gap-4">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                <span className="text-sm font-medium">{significantCount} significant</span>
+                <span className="text-xs text-muted-foreground">(p &lt; 0.05)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <MinusCircle className="h-4 w-4 text-gray-400" />
+                <span className="text-sm font-medium">{results.length - significantCount} non-significant</span>
+              </div>
+            </div>
+
+            {/* Per-RQ traffic lights */}
+            {groupedResults.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Evidence per research question</p>
+                <div className="space-y-1.5">
+                  {groupedResults.map((group) => {
+                    const light = rqTrafficLights.get(group.rqText) ?? "red";
+                    return (
+                      <div key={group.rqText} className="flex items-start gap-2">
+                        {light === "green" && <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600" />}
+                        {light === "yellow" && <MinusCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-yellow-500" />}
+                        {light === "red" && <XCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" />}
+                        <p className="text-sm text-muted-foreground line-clamp-1">{group.rqText}</p>
+                        <Badge
+                          className={`ml-auto flex-shrink-0 text-xs ${
+                            light === "green" ? "bg-green-100 text-green-800" :
+                            light === "yellow" ? "bg-yellow-100 text-yellow-800" :
+                            "bg-red-100 text-red-800"
+                          }`}
+                        >
+                          {light === "green" ? "Evidence found" : light === "yellow" ? "Mixed" : "No evidence"}
+                        </Badge>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Key predictors from regression results */}
+            {results.some((r) => {
+              const raw = r.raw_output as Record<string, unknown> | null;
+              const details = raw?.test_details as Record<string, unknown> | null;
+              return details && typeof details === "object" && "coefficients" in details;
+            }) && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Key regression predictors</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b text-left text-muted-foreground">
+                        <th className="pb-1 pr-4 font-medium">Variable</th>
+                        <th className="pb-1 pr-4 font-medium">Coefficient</th>
+                        <th className="pb-1 font-medium">p-value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {results.flatMap((r) => {
+                        const raw = r.raw_output as Record<string, unknown> | null;
+                        const details = raw?.test_details as Record<string, unknown> | null;
+                        if (!details || !("coefficients" in details)) return [];
+                        const coeffs = details.coefficients as Record<string, { estimate: number; p_value: number }>;
+                        return Object.entries(coeffs)
+                          .filter(([k]) => k !== "const")
+                          .slice(0, 3)
+                          .map(([varName, c]) => (
+                            <tr key={`${r.id}-${varName}`} className="border-b last:border-0">
+                              <td className="py-1 pr-4 font-medium">{varName}</td>
+                              <td className="py-1 pr-4">{c.estimate > 0 ? "+" : ""}{c.estimate.toFixed(3)}</td>
+                              <td className={`py-1 ${c.p_value < 0.05 ? "font-semibold text-green-700" : "text-muted-foreground"}`}>
+                                {c.p_value < 0.001 ? "<0.001" : c.p_value.toFixed(3)}
+                                {c.p_value < 0.05 && " *"}
+                              </td>
+                            </tr>
+                          ));
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
