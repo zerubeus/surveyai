@@ -15,3 +15,6 @@ ALTER TABLE public.eda_results
   ADD COLUMN IF NOT EXISTS column_role text,
   ADD COLUMN IF NOT EXISTS data_type text,
   ADD COLUMN IF NOT EXISTS interpretation jsonb;
+
+-- Add generate_analysis_plan to task_type enum (was missing from original schema)
+ALTER TYPE task_type ADD VALUE IF NOT EXISTS 'generate_analysis_plan';
