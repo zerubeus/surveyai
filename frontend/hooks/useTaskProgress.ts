@@ -43,33 +43,50 @@ export function useTaskProgress(taskId: string | null): TaskProgressState {
 
     const supabase = createBrowserClient();
 
-    // Fetch current state first
-    supabase
-      .from("tasks")
-      .select("*")
-      .eq("id", taskId)
-      .single()
-      .then(({ data, error }) => {
-        if (error || !data) {
-          setState({
-            progress: 0,
-            progressMessage: null,
-            status: null,
-            result: null,
-            error: error?.message ?? "Task not found",
-            isLoading: false,
-          });
-          return;
-        }
+    // Poll for task status — poll every 2s until terminal state
+    // This ensures we catch completion even when Realtime misses an event
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+    const fetchTask = async () => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("id", taskId)
+        .single();
+
+      if (error || !data) {
         setState({
-          progress: data.progress,
-          progressMessage: data.progress_message,
-          status: data.status,
-          result: data.result,
-          error: data.error,
+          progress: 0,
+          progressMessage: null,
+          status: null,
+          result: null,
+          error: error?.message ?? "Task not found",
           isLoading: false,
         });
+        if (pollInterval) clearInterval(pollInterval);
+        return;
+      }
+
+      setState({
+        progress: data.progress,
+        progressMessage: data.progress_message,
+        status: data.status,
+        result: data.result,
+        error: data.error,
+        isLoading: false,
       });
+
+      // Stop polling when task reaches terminal state
+      if (data.status === "completed" || data.status === "failed" || data.status === "cancelled") {
+        if (pollInterval) clearInterval(pollInterval);
+      }
+    };
+
+    // Initial fetch
+    fetchTask();
+
+    // Poll every 2 seconds as fallback for missed Realtime events
+    pollInterval = setInterval(fetchTask, 2000);
 
     // Subscribe to real-time updates
     const channel = supabase
@@ -98,6 +115,7 @@ export function useTaskProgress(taskId: string | null): TaskProgressState {
 
     return () => {
       supabase.removeChannel(channel);
+      if (pollInterval) clearInterval(pollInterval);
     };
   }, [taskId]);
 

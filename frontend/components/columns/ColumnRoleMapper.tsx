@@ -46,13 +46,25 @@ export function ColumnRoleMapper({
   const taskProgress = useTaskProgress(taskId);
   const [isConfirming, setIsConfirming] = useState(false);
   const hasDispatchedRef = useRef(false);
+  const hasFetchedAfterCompleteRef = useRef(false);
 
-  // When task completes, re-fetch mappings from DB (Realtime may not be instant)
+  // When task completes, re-fetch mappings from DB.
+  // Use a ref guard so this fires exactly once per task completion,
+  // whether status arrives via initial fetch or via Realtime UPDATE.
   useEffect(() => {
-    if (taskProgress.status === "completed") {
+    if (
+      taskProgress.status === "completed" &&
+      !hasFetchedAfterCompleteRef.current
+    ) {
+      hasFetchedAfterCompleteRef.current = true;
       refetch();
     }
   }, [taskProgress.status, refetch]);
+
+  // Reset the ref when a new task is dispatched
+  useEffect(() => {
+    hasFetchedAfterCompleteRef.current = false;
+  }, [taskId]);
 
   // Auto-dispatch detection task if no mappings exist
   useEffect(() => {
