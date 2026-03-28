@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import Link from "next/link";
 import { createBrowserClient } from "@/lib/supabase/browser";
 import { DatasetUploader } from "@/components/datasets/DatasetUploader";
 import { DatasetConfirmation } from "@/components/datasets/DatasetConfirmation";
 import { ColumnRoleMapper } from "@/components/columns/ColumnRoleMapper";
-import { CheckCircle2, RotateCcw } from "lucide-react";
+import { CheckCircle2, RotateCcw, BarChart2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Tables } from "@/lib/types/database";
 
@@ -101,10 +102,20 @@ export function DatasetWorkflow({ initialDataset, projectId, instrumentId }: Dat
       />
       {rolesConfirmed && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-6 dark:border-blue-900 dark:bg-blue-950">
-          <p className="font-medium text-blue-900 dark:text-blue-100">✅ Column roles confirmed</p>
-          <p className="mt-1 text-sm text-blue-700 dark:text-blue-300">
-            Next: EDA & Bias Detection — coming in Sprint 7 completion.
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-blue-900 dark:text-blue-100">✅ Column roles confirmed</p>
+              <p className="mt-1 text-sm text-blue-700 dark:text-blue-300">
+                Ready to analyse data quality — detect issues, inconsistencies, and potential biases.
+              </p>
+            </div>
+            <Button asChild>
+              <Link href={`/projects/${projectId}/quality`}>
+                <BarChart2 className="mr-2 h-4 w-4" />
+                Analyse Data Quality
+              </Link>
+            </Button>
+          </div>
         </div>
       )}
     </div>
