@@ -67,49 +67,20 @@ export function DatasetUploader({ projectId, onUploadComplete }: DatasetUploader
 
     const storagePath = `${user.id}/${projectId}/${file.name}`;
 
-    // Upload to Supabase Storage with progress tracking via XMLHttpRequest
-    const { data: sessionData } = await supabase.auth.getSession();
-    const accessToken = sessionData.session?.access_token;
-    if (!accessToken) {
-      setUploadState("error");
-      setErrorMessage("Session expired. Please log in again.");
-      return;
-    }
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-
     try {
-      // Use XMLHttpRequest for upload progress
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.upload.addEventListener("progress", (e) => {
-          if (e.lengthComputable) {
-            setProgress(Math.round((e.loaded / e.total) * 100));
-          }
+      // Use Supabase SDK upload — SDK handles all auth headers correctly
+      const { error: uploadError } = await supabase.storage
+        .from("uploads")
+        .upload(storagePath, file, {
+          upsert: true,
+          onUploadProgress: (progress) => {
+            setProgress(Math.round((progress.loaded / progress.total) * 100));
+          },
         });
-        xhr.addEventListener("load", () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve();
-          } else {
-            let msg = "Upload failed";
-            try {
-              const resp = JSON.parse(xhr.responseText) as { error?: string; message?: string };
-              msg = resp.error || resp.message || msg;
-            } catch {
-              // ignore parse errors
-            }
-            reject(new Error(msg));
-          }
-        });
-        xhr.addEventListener("error", () => reject(new Error("Network error during upload")));
-        xhr.addEventListener("abort", () => reject(new Error("Upload was cancelled")));
 
-        xhr.open("POST", `${supabaseUrl}/storage/v1/object/uploads/${storagePath}`);
-        xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
-        xhr.setRequestHeader("apikey", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-        xhr.setRequestHeader("x-upsert", "true");
-        xhr.send(file);
-      });
+      if (uploadError) {
+        throw new Error(uploadError.message);
+      }
 
       // Create dataset record
       const { data: dataset, error: insertError } = await supabase
