@@ -14,11 +14,13 @@ interface DatasetWorkflowProps {
   initialDataset: Tables<"datasets"> | null;
   projectId: string;
   instrumentId: string | null;
+  hasColumnMappings?: boolean;  // true if mappings already exist in DB
 }
 
-export function DatasetWorkflow({ initialDataset, projectId, instrumentId }: DatasetWorkflowProps) {
+export function DatasetWorkflow({ initialDataset, projectId, instrumentId, hasColumnMappings = false }: DatasetWorkflowProps) {
   const [dataset, setDataset] = useState<Tables<"datasets"> | null>(initialDataset);
-  const [rolesConfirmed, setRolesConfirmed] = useState(false);
+  // rolesConfirmed persists across refreshes if mappings already exist in DB
+  const [rolesConfirmed, setRolesConfirmed] = useState(hasColumnMappings);
   const [isResetting, setIsResetting] = useState(false);
 
   const handleUploadComplete = useCallback((uploaded: Tables<"datasets">) => {

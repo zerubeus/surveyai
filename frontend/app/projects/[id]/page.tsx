@@ -54,6 +54,14 @@ export default async function ProjectDetailPage({
 
   const currentDataset = datasets?.[0] ?? null;
 
+  // Check if column mappings already exist (roles were previously detected)
+  const { count: mappingCount } = await supabase
+    .from("column_mappings")
+    .select("id", { count: "exact", head: true })
+    .eq("dataset_id", currentDataset?.id ?? "00000000-0000-0000-0000-000000000000");
+
+  const hasColumnMappings = (mappingCount ?? 0) > 0;
+
   // Fetch the most recently PARSED instrument (prefer parsed over pending)
   const { data: instruments } = await supabase
     .from("instruments")
@@ -100,6 +108,7 @@ export default async function ProjectDetailPage({
           initialDataset={currentDataset}
           projectId={project.id}
           instrumentId={currentInstrument?.parse_status === "parsed" ? currentInstrument.id : null}
+          hasColumnMappings={hasColumnMappings}
         />
       </div>
     </div>
