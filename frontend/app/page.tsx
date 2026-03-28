@@ -10,6 +10,6 @@ export default async function Home() {
   if (session) {
     redirect("/dashboard");
   } else {
-    redirect("/auth/login");
+    redirect("/landing");
   }
 }
