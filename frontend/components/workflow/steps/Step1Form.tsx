@@ -128,8 +128,12 @@ function parseAudience(ctx: string | null): AudienceValue | "" {
   if (!ctx) return "";
   try {
     const parsed = JSON.parse(ctx);
-    if (parsed && typeof parsed === "object" && typeof parsed.audience === "string") {
-      return parsed.audience as AudienceValue;
+    if (parsed && typeof parsed === "object") {
+      // Support both formats:
+      // Step1Form saves: { audience: "..." }
+      // ProjectContextForm saves: { report_audience: "...", ... }
+      const val = parsed.audience ?? parsed.report_audience;
+      if (typeof val === "string") return val as AudienceValue;
     }
   } catch {
     // not JSON
@@ -194,7 +198,7 @@ export function Step1Form({ project }: Step1FormProps) {
     "projects",
     project.id,
     "additional_context",
-    audience ? JSON.stringify({ audience }) : null
+    JSON.stringify({ audience: audience || null })
   );
 
   // -- validation --
@@ -263,7 +267,7 @@ export function Step1Form({ project }: Step1FormProps) {
         target_population: targetPopulation || null,
         geographic_scope: JSON.stringify(geoScope),
         research_questions: researchQuestions as unknown as Json,
-        additional_context: audience ? JSON.stringify({ audience }) : null,
+        additional_context: JSON.stringify({ audience: audience || null }),
         current_step: 2,
         pipeline_status: newPipeline as unknown as Json,
       })
