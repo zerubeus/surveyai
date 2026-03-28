@@ -1,7 +1,9 @@
 import { notFound, redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
+import { Step1Form } from "@/components/workflow/steps/Step1Form";
+import type { Tables } from "@/lib/types/database";
 
-export default async function ProjectDetailPage({
+export default async function Step1Page({
   params,
 }: {
   params: { id: string };
@@ -17,7 +19,7 @@ export default async function ProjectDetailPage({
 
   const { data: project } = await supabase
     .from("projects")
-    .select("id, current_step")
+    .select("*")
     .eq("id", params.id)
     .single();
 
@@ -25,6 +27,5 @@ export default async function ProjectDetailPage({
     notFound();
   }
 
-  const step = project.current_step ?? 1;
-  redirect(`/projects/${project.id}/step/${step}`);
+  return <Step1Form project={project as Tables<"projects">} />;
 }
