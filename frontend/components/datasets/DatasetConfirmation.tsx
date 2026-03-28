@@ -74,7 +74,7 @@ export function DatasetConfirmation({
           <div className="space-y-1 text-sm text-muted-foreground">
             {dataset.row_count != null && dataset.column_count != null ? (
               <p>
-                We detected <strong className="text-foreground">{dataset.row_count.toLocaleString()} rows</strong> and{" "}
+                We detected <strong className="text-foreground">{dataset.row_count.toLocaleString('en-US')} rows</strong> and{" "}
                 <strong className="text-foreground">{dataset.column_count} columns</strong>.
                 Row 1 appears to be headers.
               </p>

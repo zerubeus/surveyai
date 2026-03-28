@@ -74,7 +74,7 @@ export function DatasetWorkflow({ initialDataset, projectId, instrumentId }: Dat
                 Data confirmed
               </p>
               <p className="text-sm text-green-700 dark:text-green-300">
-                {dataset.name} — {dataset.row_count?.toLocaleString() ?? "?"} rows,{" "}
+                {dataset.name} — {dataset.row_count?.toLocaleString('en-US') ?? "?"} rows,{" "}
                 {dataset.column_count ?? "?"} columns
               </p>
             </div>

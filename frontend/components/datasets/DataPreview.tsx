@@ -187,7 +187,7 @@ export function DataPreview({ datasetId, storagePath, fileType }: DataPreviewPro
           Data Preview
         </CardTitle>
         <div className="flex gap-4 text-sm text-muted-foreground">
-          <span>{data.totalRows.toLocaleString()} rows</span>
+          <span>{data.totalRows.toLocaleString('en-US')} rows</span>
           <span>{data.totalColumns} columns</span>
         </div>
       </CardHeader>
@@ -224,7 +224,7 @@ export function DataPreview({ datasetId, storagePath, fileType }: DataPreviewPro
         </div>
         {data.totalRows > 5 && (
           <p className="mt-2 text-center text-xs text-muted-foreground">
-            Showing first 5 of {data.totalRows.toLocaleString()} rows
+            Showing first 5 of {data.totalRows.toLocaleString('en-US')} rows
           </p>
         )}
       </CardContent>

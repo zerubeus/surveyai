@@ -136,16 +136,15 @@ export function InstrumentUploader({ projectId }: InstrumentUploaderProps) {
       const storagePath = `${user.id}/${projectId}/instrument/${file.name}`;
 
       try {
-        // Use Supabase SDK upload with onUploadProgress — SDK handles all auth headers correctly
+        // Use Supabase SDK upload — SDK handles all auth headers correctly
+        setUploadProgress(30); // show progress while uploading
         const { error: uploadError } = await supabase.storage
           .from("uploads")
           .upload(storagePath, file, {
             contentType: mimeType,
             upsert: true,
-            onUploadProgress: (progress) => {
-              setUploadProgress(Math.round((progress.loaded / progress.total) * 100));
-            },
           });
+        setUploadProgress(70);
 
         if (uploadError) {
           throw new Error(uploadError.message);

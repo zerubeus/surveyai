@@ -69,14 +69,13 @@ export function DatasetUploader({ projectId, onUploadComplete }: DatasetUploader
 
     try {
       // Use Supabase SDK upload — SDK handles all auth headers correctly
+      setProgress(30);
       const { error: uploadError } = await supabase.storage
         .from("uploads")
         .upload(storagePath, file, {
           upsert: true,
-          onUploadProgress: (progress) => {
-            setProgress(Math.round((progress.loaded / progress.total) * 100));
-          },
         });
+      setProgress(70);
 
       if (uploadError) {
         throw new Error(uploadError.message);
