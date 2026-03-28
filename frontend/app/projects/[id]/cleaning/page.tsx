@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { createBrowserClient } from "@/lib/supabase/browser";
@@ -22,6 +22,7 @@ import {
   Loader2,
   Wand2,
   ArrowRight,
+  CheckCircle2,
 } from "lucide-react";
 import type { Tables } from "@/lib/types/database";
 
@@ -113,18 +114,28 @@ export default function CleaningPage() {
   }, [dataset, projectId, dispatchTask]);
 
   // Refetch when generation completes
+  const hasFetchedRef = useRef(false);
   useEffect(() => {
-    if (generateProgress.status === "completed") {
-      refetchSuggestions();
-      setGenerateTaskId(null);
+    if (generateProgress.status === "completed" && generateTaskId && !hasFetchedRef.current) {
+      hasFetchedRef.current = true;
+      refetchSuggestions().finally(() => setGenerateTaskId(null));
     }
-  }, [generateProgress.status, refetchSuggestions]);
+  }, [generateProgress.status, generateTaskId, refetchSuggestions]);
+
+  useEffect(() => {
+    if (generateTaskId) hasFetchedRef.current = false;
+  }, [generateTaskId]);
 
   const isGenerating =
-    generateProgress.status === "running" ||
-    generateProgress.status === "claimed";
+    generateTaskId !== null &&
+    (generateProgress.status === "pending" ||
+     generateProgress.status === "running" ||
+     generateProgress.status === "claimed");
 
   const hasSuggestions = all.length > 0;
+  // Task ran but produced 0 suggestions — data is already clean
+  const analysisRanClean = !generateTaskId && !hasSuggestions && !suggestionsLoading &&
+    generateProgress.status === "completed";
 
   if (loading) {
     return (
@@ -177,8 +188,27 @@ export default function CleaningPage() {
       </div>
 
       <div className="space-y-6">
+        {/* Clean data — no suggestions needed */}
+        {analysisRanClean && (
+          <Card className="border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30">
+            <CardContent className="flex items-center gap-4 py-6">
+              <CheckCircle2 className="h-8 w-8 text-green-600 shrink-0" />
+              <div>
+                <p className="font-medium text-green-900 dark:text-green-100">Your data looks clean!</p>
+                <p className="text-sm text-green-700 dark:text-green-300">
+                  No cleaning issues were detected. You can proceed directly to analysis.
+                </p>
+              </div>
+              <Button className="ml-auto" onClick={() => router.push(`/projects/${projectId}/analysis`)}>
+                Proceed to Analysis
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Generate button */}
-        {!hasSuggestions && !isGenerating && (
+        {!hasSuggestions && !isGenerating && !analysisRanClean && (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Wand2 className="mb-4 h-12 w-12 text-muted-foreground/50" />
