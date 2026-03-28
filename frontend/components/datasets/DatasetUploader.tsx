@@ -72,9 +72,7 @@ export function DatasetUploader({ projectId, onUploadComplete }: DatasetUploader
       setProgress(30);
       const { error: uploadError } = await supabase.storage
         .from("uploads")
-        .upload(storagePath, file, {
-          upsert: true,
-        });
+        .upload(storagePath, file);
       setProgress(70);
 
       if (uploadError) {

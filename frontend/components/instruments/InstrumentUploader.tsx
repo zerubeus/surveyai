@@ -142,7 +142,6 @@ export function InstrumentUploader({ projectId }: InstrumentUploaderProps) {
           .from("uploads")
           .upload(storagePath, file, {
             contentType: mimeType,
-            upsert: true,
           });
         setUploadProgress(70);
 
