@@ -65,7 +65,9 @@ export function DatasetUploader({ projectId, onUploadComplete }: DatasetUploader
       return;
     }
 
-    const storagePath = `${user.id}/${projectId}/${file.name}`;
+    const ext = file.name.split(".").pop() ?? "";
+    const baseName = file.name.replace(/\.[^/.]+$/, "");
+    const storagePath = `${user.id}/${projectId}/${baseName}_${Date.now()}.${ext}`;
 
     try {
       // Use Supabase SDK upload — SDK handles all auth headers correctly

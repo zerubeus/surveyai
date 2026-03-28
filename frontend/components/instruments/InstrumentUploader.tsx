@@ -133,7 +133,9 @@ export function InstrumentUploader({ projectId }: InstrumentUploaderProps) {
         return;
       }
 
-      const storagePath = `${user.id}/${projectId}/instrument/${file.name}`;
+      const ext = file.name.split(".").pop() ?? "";
+      const baseName = file.name.replace(/\.[^/.]+$/, "");
+      const storagePath = `${user.id}/${projectId}/instrument/${baseName}_${Date.now()}.${ext}`;
 
       try {
         // Use Supabase SDK upload — SDK handles all auth headers correctly
