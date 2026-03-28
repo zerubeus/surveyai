@@ -41,7 +41,9 @@ export default async function DataQualityPage({
 
   const dataset = datasets?.[0] ?? null;
 
-  if (!dataset || dataset.status !== "confirmed") {
+  // Allow access for any dataset that has been confirmed (or progressed past confirmation)
+  const confirmedStatuses = ["confirmed", "profiled", "cleaning", "cleaned", "analyzed"];
+  if (!dataset || !confirmedStatuses.includes(dataset.status)) {
     redirect(`/projects/${params.id}`);
   }
 
