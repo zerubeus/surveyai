@@ -22,7 +22,7 @@ export default async function Step7Page({
   if (!project) notFound();
 
   // Check for running generate_report or export_report tasks
-  const { data: runningTasks } = await supabase
+  const { data: runningTasksRaw } = await supabase
     .from("tasks")
     .select("id, task_type, status")
     .eq("project_id", params.id)
@@ -30,6 +30,7 @@ export default async function Step7Page({
     .in("status", ["pending", "claimed", "running"])
     .order("created_at", { ascending: false })
     .limit(2);
+  const runningTasks = runningTasksRaw as { id: string; task_type: string; status: string }[] | null;
 
   const initialTaskIds: Record<string, string> = {};
   for (const task of runningTasks ?? []) {

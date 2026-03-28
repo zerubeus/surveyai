@@ -21,15 +21,16 @@ export default async function Step6Page({
     .single();
   if (!project) notFound();
 
-  const { data: dataset } = await supabase
+  const { data: datasetRaw } = await supabase
     .from("datasets")
     .select("*")
     .eq("project_id", params.id)
     .eq("is_current", true)
     .maybeSingle();
+  const dataset = datasetRaw as Tables<"datasets"> | null;
 
   // Check for running run_analysis task
-  const { data: runningTask } = await supabase
+  const { data: runningTaskRaw } = await supabase
     .from("tasks")
     .select("id, task_type, status")
     .eq("project_id", params.id)
@@ -38,11 +39,12 @@ export default async function Step6Page({
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  const runningTask = runningTaskRaw as { id: string } | null;
 
   return (
     <Step6Results
       project={project as Tables<"projects">}
-      dataset={dataset as Tables<"datasets"> | null}
+      dataset={dataset}
       initialRunningTaskId={runningTask?.id ?? null}
     />
   );

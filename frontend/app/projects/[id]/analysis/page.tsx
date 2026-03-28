@@ -73,38 +73,41 @@ export default function AnalysisPage() {
         return;
       }
 
-      const { data: proj } = await supabase
+      const { data: projRaw } = await supabase
         .from("projects")
         .select("*")
         .eq("id", projectId)
         .single();
+      const proj = projRaw as Project | null;
 
       if (!proj) {
-        router.push("/projects");
+        router.push("/projects" as never);
         return;
       }
       setProject(proj);
 
-      const { data: datasets } = await supabase
+      const { data: datasetsRaw } = await supabase
         .from("datasets")
         .select("*")
         .eq("project_id", projectId)
         .eq("is_current", true)
         .order("created_at", { ascending: false })
         .limit(1);
+      const datasets = datasetsRaw as Dataset[] | null;
 
       const ds = datasets?.[0] ?? null;
       if (!ds) {
-        router.push(`/projects/${projectId}`);
+        router.push(`/projects/${projectId}` as never);
         return;
       }
       setDataset(ds);
 
       // Load column mappings for variable dropdowns
-      const { data: mappings } = await supabase
+      const { data: mappingsRaw } = await supabase
         .from("column_mappings")
         .select("*")
         .eq("dataset_id", ds.id);
+      const mappings = mappingsRaw as Tables<"column_mappings">[] | null;
 
       setColumnMappings(mappings ?? []);
       setLoading(false);
@@ -362,7 +365,7 @@ export default function AnalysisPage() {
                   Choose a template and let AI draft your report sections.
                 </p>
               </div>
-              <Button onClick={() => router.push(`/projects/${projectId}/report`)}>
+              <Button onClick={() => router.push(`/projects/${projectId}/report` as never)}>
                 <FileText className="mr-2 h-4 w-4" />
                 Generate Report
               </Button>

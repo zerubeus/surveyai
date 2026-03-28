@@ -38,12 +38,13 @@ export function useReport(projectId: string | null) {
     const supabase = createBrowserClient();
 
     // Fetch the latest report for this project
-    const { data: reports, error: reportErr } = await supabase
+    const { data: reportsRaw, error: reportErr } = await supabase
       .from("reports")
       .select("*")
       .eq("project_id", projectId)
       .order("created_at", { ascending: false })
       .limit(1);
+    const reports = reportsRaw as Report[] | null;
 
     if (reportErr) {
       setState({ report: null, sections: [], exports: [], isLoading: false, error: reportErr.message });
@@ -73,8 +74,8 @@ export function useReport(projectId: string | null) {
 
     setState({
       report,
-      sections: sectionsRes.data ?? [],
-      exports: exportsRes.data ?? [],
+      sections: (sectionsRes.data as ReportSection[] | null) ?? [],
+      exports: (exportsRes.data as ReportExport[] | null) ?? [],
       isLoading: false,
       error: null,
     });

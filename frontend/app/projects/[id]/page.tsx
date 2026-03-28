@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
+import type { Tables } from "@/lib/types/database";
 
 export default async function ProjectDetailPage({
   params,
@@ -15,11 +16,12 @@ export default async function ProjectDetailPage({
     redirect("/auth/login");
   }
 
-  const { data: project } = await supabase
+  const { data: projectRaw } = await supabase
     .from("projects")
     .select("id, current_step")
     .eq("id", params.id)
     .single();
+  const project = projectRaw as Pick<Tables<"projects">, "id" | "current_step"> | null;
 
   if (!project) {
     notFound();

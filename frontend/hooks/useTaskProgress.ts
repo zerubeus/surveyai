@@ -48,11 +48,18 @@ export function useTaskProgress(taskId: string | null): TaskProgressState {
     let pollInterval: ReturnType<typeof setInterval> | null = null;
 
     const fetchTask = async () => {
-      const { data, error } = await supabase
+      const { data: dataRaw, error } = await supabase
         .from("tasks")
         .select("*")
         .eq("id", taskId)
         .single();
+      const data = dataRaw as {
+        progress: number;
+        progress_message: string | null;
+        status: string;
+        result: unknown;
+        error: string | null;
+      } | null;
 
       if (error || !data) {
         setState({

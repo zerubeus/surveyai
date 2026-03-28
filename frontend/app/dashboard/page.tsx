@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { ProjectCard } from "@/components/projects/ProjectCard";
+import type { Tables } from "@/lib/types/database";
+
+type Project = Tables<"projects">;
 
 export default async function DashboardPage() {
   const supabase = await createServerClient();
@@ -14,10 +17,11 @@ export default async function DashboardPage() {
     redirect("/auth/login");
   }
 
-  const { data: projects } = await supabase
+  const { data: projectsRaw } = await supabase
     .from("projects")
     .select("*")
     .order("created_at", { ascending: false });
+  const projects = projectsRaw as Project[] | null;
 
   return (
     <div className="container py-10">

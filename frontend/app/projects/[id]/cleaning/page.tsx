@@ -64,29 +64,31 @@ export default function CleaningPage() {
         return;
       }
 
-      const { data: proj } = await supabase
+      const { data: projRaw } = await supabase
         .from("projects")
         .select("*")
         .eq("id", projectId)
         .single();
+      const proj = projRaw as Project | null;
 
       if (!proj) {
-        router.push("/projects");
+        router.push("/projects" as never);
         return;
       }
       setProject(proj);
 
-      const { data: datasets } = await supabase
+      const { data: datasetsRaw } = await supabase
         .from("datasets")
         .select("*")
         .eq("project_id", projectId)
         .eq("is_current", true)
         .order("created_at", { ascending: false })
         .limit(1);
+      const datasets = datasetsRaw as Dataset[] | null;
 
       const ds = datasets?.[0] ?? null;
       if (!ds) {
-        router.push(`/projects/${projectId}`);
+        router.push(`/projects/${projectId}` as never);
         return;
       }
       setDataset(ds);
@@ -214,7 +216,7 @@ export default function CleaningPage() {
                   No cleaning issues were detected. You can proceed directly to analysis.
                 </p>
               </div>
-              <Button className="ml-auto" onClick={() => router.push(`/projects/${projectId}/analysis`)}>
+              <Button className="ml-auto" onClick={() => router.push(`/projects/${projectId}/analysis` as never)}>
                 Proceed to Analysis
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
@@ -308,7 +310,7 @@ export default function CleaningPage() {
         {/* Proceed to Analysis */}
         {hasSuggestions && (
           <div className="flex justify-end pt-4">
-            <Button onClick={() => router.push(`/projects/${projectId}/analysis`)}>
+            <Button onClick={() => router.push(`/projects/${projectId}/analysis` as never)}>
               Proceed to Analysis
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>

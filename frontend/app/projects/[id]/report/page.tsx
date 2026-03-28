@@ -101,11 +101,12 @@ export default function ReportPage() {
         return;
       }
 
-      const { data: proj } = await supabase
+      const { data: projRaw } = await supabase
         .from("projects")
         .select("*")
         .eq("id", projectId)
         .single();
+      const proj = projRaw as Project | null;
 
       if (!proj) {
         router.push("/projects");
@@ -113,13 +114,14 @@ export default function ReportPage() {
       }
       setProject(proj);
 
-      const { data: datasets } = await supabase
+      const { data: datasetsRaw } = await supabase
         .from("datasets")
         .select("*")
         .eq("project_id", projectId)
         .eq("is_current", true)
         .order("created_at", { ascending: false })
         .limit(1);
+      const datasets = datasetsRaw as Dataset[] | null;
 
       setDataset(datasets?.[0] ?? null);
       setLoading(false);
@@ -167,10 +169,11 @@ export default function ReportPage() {
       const urls: Record<string, string> = {};
 
       // Fetch chart records to get file_path
-      const { data: charts } = await supabase
+      const { data: chartsRaw } = await supabase
         .from("charts")
         .select("id, file_path")
         .in("id", allChartIds);
+      const charts = chartsRaw as { id: string; file_path: string | null }[] | null;
 
       if (charts) {
         for (const chart of charts) {
@@ -208,7 +211,7 @@ export default function ReportPage() {
 
     // Create or update report record
     if (!reportId) {
-      const { data: newReport, error } = await supabase
+      const { data: newReportRaw, error } = await supabase
         .from("reports")
         .insert({
           project_id: projectId,
@@ -219,6 +222,7 @@ export default function ReportPage() {
         })
         .select("id")
         .single();
+      const newReport = newReportRaw as { id: string } | null;
 
       if (error || !newReport) return;
       reportId = newReport.id;
@@ -226,7 +230,7 @@ export default function ReportPage() {
       await supabase
         .from("reports")
         .update({
-          template: selectedTemplate,
+          template: selectedTemplate as string,
           status: "generating",
         })
         .eq("id", reportId);

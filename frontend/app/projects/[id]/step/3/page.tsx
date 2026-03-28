@@ -22,27 +22,29 @@ export default async function Step3Page({
   if (!project) notFound();
 
   // Fetch current dataset for this project
-  const { data: dataset } = await supabase
+  const { data: datasetRaw } = await supabase
     .from("datasets")
     .select("*")
     .eq("project_id", params.id)
     .eq("is_current", true)
     .maybeSingle();
+  const dataset = datasetRaw as Tables<"datasets"> | null;
 
   // Fetch existing column mappings (if any)
-  const { data: mappings } = dataset
+  const { data: mappingsRaw } = dataset
     ? await supabase
         .from("column_mappings")
         .select("*")
         .eq("dataset_id", dataset.id)
         .order("column_index", { ascending: true })
     : { data: null };
+  const mappings = mappingsRaw as Tables<"column_mappings">[] | null;
 
   return (
     <Step3ColumnRoles
       project={project as Tables<"projects">}
       dataset={dataset as Tables<"datasets"> | null}
-      initialMappings={(mappings as Tables<"column_mappings">[]) ?? []}
+      initialMappings={mappings ?? []}
     />
   );
 }

@@ -22,25 +22,27 @@ export default async function Step5Page({
   if (!project) notFound();
 
   // Fetch current dataset for this project
-  const { data: dataset } = await supabase
+  const { data: datasetRaw } = await supabase
     .from("datasets")
     .select("*")
     .eq("project_id", params.id)
     .eq("is_current", true)
     .maybeSingle();
+  const dataset = datasetRaw as Tables<"datasets"> | null;
 
   // Check if a weight column is confirmed in column_mappings
   let hasWeightColumn = false;
   let weightColumnName: string | null = null;
 
   if (dataset) {
-    const { data: weightMapping } = await supabase
+    const { data: weightMappingRaw } = await supabase
       .from("column_mappings")
       .select("column_name")
       .eq("dataset_id", dataset.id)
       .eq("role", "weight")
       .not("confirmed_by", "is", null)
       .maybeSingle();
+    const weightMapping = weightMappingRaw as { column_name: string } | null;
 
     if (weightMapping) {
       hasWeightColumn = true;
@@ -49,7 +51,7 @@ export default async function Step5Page({
   }
 
   // Check for running generate_analysis_plan or run_analysis tasks
-  const { data: runningTasks } = await supabase
+  const { data: runningTasksRaw } = await supabase
     .from("tasks")
     .select("id, task_type, status")
     .eq("project_id", params.id)
@@ -57,6 +59,7 @@ export default async function Step5Page({
     .in("status", ["pending", "claimed", "running"])
     .order("created_at", { ascending: false })
     .limit(2);
+  const runningTasks = runningTasksRaw as { id: string; task_type: string; status: string }[] | null;
 
   const initialTaskIds: Record<string, string> = {};
   for (const task of runningTasks ?? []) {
@@ -66,7 +69,7 @@ export default async function Step5Page({
   return (
     <Step5Analysis
       project={project as Tables<"projects">}
-      dataset={dataset as Tables<"datasets"> | null}
+      dataset={dataset}
       hasWeightColumn={hasWeightColumn}
       weightColumnName={weightColumnName}
       initialRunningTaskIds={initialTaskIds}

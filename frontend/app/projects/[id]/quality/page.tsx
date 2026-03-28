@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { QualityDashboard } from "@/components/eda/QualityDashboard";
 import { ChevronLeft } from "lucide-react";
+import type { Tables } from "@/lib/types/database";
 
 export default async function DataQualityPage({
   params,
@@ -20,25 +21,26 @@ export default async function DataQualityPage({
     redirect("/auth/login");
   }
 
-  const { data: project } = await supabase
+  const { data: projectRaw } = await supabase
     .from("projects")
     .select("*")
     .eq("id", params.id)
     .single();
+  const project = projectRaw as Tables<"projects"> | null;
 
   if (!project) {
     notFound();
   }
 
   // Fetch current confirmed dataset
-  const { data: datasets } = await supabase
+  const { data: datasetsRaw } = await supabase
     .from("datasets")
     .select("*")
     .eq("project_id", project.id)
     .eq("is_current", true)
     .order("created_at", { ascending: false })
     .limit(1);
-
+  const datasets = datasetsRaw as Tables<"datasets">[] | null;
   const dataset = datasets?.[0] ?? null;
 
   // Allow access for any dataset that has been confirmed (or progressed past confirmation)

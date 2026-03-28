@@ -35,7 +35,7 @@ export default async function Step4Page({
     "run_consistency_checks",
     "run_bias_detection",
   ];
-  const { data: runningTasks } = await supabase
+  const { data: runningTasksRaw } = await supabase
     .from("tasks")
     .select("id, task_type, status")
     .eq("project_id", params.id)
@@ -43,6 +43,7 @@ export default async function Step4Page({
     .in("status", ["pending", "claimed", "running"])
     .order("created_at", { ascending: false })
     .limit(3);
+  const runningTasks = runningTasksRaw as { id: string; task_type: string; status: string }[] | null;
 
   // Build initial task ID map
   const initialTaskIds: Record<string, string> = {};
@@ -53,7 +54,7 @@ export default async function Step4Page({
   return (
     <Step4Quality
       project={project as Tables<"projects">}
-      dataset={dataset as Tables<"datasets"> | null}
+      dataset={(dataset as Tables<"datasets"> | null)}
       initialRunningTaskIds={initialTaskIds}
     />
   );
