@@ -22,6 +22,8 @@ from services.eda_service import run_eda
 from services.consistency_service import run_consistency_checks
 from services.bias_service import run_bias_detection
 from services.eda_interpreter import interpret_quality_results
+from services.cleaning_service import generate_cleaning_suggestions
+from services.cleaning_executor import apply_cleaning_operation
 
 load_dotenv()
 
@@ -127,9 +129,15 @@ def handle_task(db: SupabaseDB, task_id: str, task_type: str, payload: dict) -> 
         _handle_interpret_results(db, task_id, payload)
         return
 
+    if task_type == "generate_cleaning_suggestions":
+        generate_cleaning_suggestions(db, task_id, payload)
+        return
+
+    if task_type == "apply_cleaning_operation":
+        apply_cleaning_operation(db, task_id, payload)
+        return
+
     # Future sprint handlers:
-    # Sprint 8: generate_cleaning_suggestions
-    # Sprint 9: apply_cleaning_operation
     # Sprint 11-12: run_analysis
     # Sprint 14: generate_report_section
     # Sprint 15: generate_chart
