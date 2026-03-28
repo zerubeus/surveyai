@@ -23,28 +23,35 @@ export function useColumnMappings(datasetId: string | null) {
     error: null,
   });
 
+  const fetchMappings = useCallback(async () => {
+    if (!datasetId) {
+      setState({ mappings: [], isLoading: false, error: null });
+      return;
+    }
+    const supabase = createBrowserClient();
+    setState((prev) => ({ ...prev, isLoading: true }));
+    const { data, error } = await supabase
+      .from("column_mappings")
+      .select("*")
+      .eq("dataset_id", datasetId)
+      .order("column_index", { ascending: true });
+    if (error) {
+      setState({ mappings: [], isLoading: false, error: error.message });
+    } else {
+      setState({ mappings: data ?? [], isLoading: false, error: null });
+    }
+  }, [datasetId]);
+
   useEffect(() => {
     if (!datasetId) {
       setState({ mappings: [], isLoading: false, error: null });
       return;
     }
 
-    setState((prev) => ({ ...prev, isLoading: true, error: null }));
+    fetchMappings();
     const supabase = createBrowserClient();
 
-    // Fetch existing mappings
-    supabase
-      .from("column_mappings")
-      .select("*")
-      .eq("dataset_id", datasetId)
-      .order("column_index", { ascending: true })
-      .then(({ data, error }) => {
-        if (error) {
-          setState({ mappings: [], isLoading: false, error: error.message });
-          return;
-        }
-        setState({ mappings: data ?? [], isLoading: false, error: null });
-      });
+    // Fetch existing mappings — already done above
 
     // Subscribe to inserts and updates
     const channel = supabase
@@ -90,7 +97,7 @@ export function useColumnMappings(datasetId: string | null) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [datasetId]);
+  }, [datasetId, fetchMappings]);
 
   const updateRole = useCallback(
     async (mappingId: string, newRole: Enums<"column_role">) => {
@@ -170,5 +177,6 @@ export function useColumnMappings(datasetId: string | null) {
     error: state.error,
     updateRole,
     confirmAll,
+    refetch: fetchMappings,
   };
 }

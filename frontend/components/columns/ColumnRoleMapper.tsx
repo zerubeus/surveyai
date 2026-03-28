@@ -39,13 +39,20 @@ export function ColumnRoleMapper({
   instrumentId,
   onComplete,
 }: ColumnRoleMapperProps) {
-  const { mappings, isLoading, updateRole, confirmAll } =
+  const { mappings, isLoading, updateRole, confirmAll, refetch } =
     useColumnMappings(datasetId);
   const { dispatchTask, isDispatching } = useDispatchTask();
   const [taskId, setTaskId] = useState<string | null>(null);
   const taskProgress = useTaskProgress(taskId);
   const [isConfirming, setIsConfirming] = useState(false);
   const hasDispatchedRef = useRef(false);
+
+  // When task completes, re-fetch mappings from DB (Realtime may not be instant)
+  useEffect(() => {
+    if (taskProgress.status === "completed") {
+      refetch();
+    }
+  }, [taskProgress.status, refetch]);
 
   // Auto-dispatch detection task if no mappings exist
   useEffect(() => {
