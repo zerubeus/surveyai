@@ -19,24 +19,52 @@ interface ProjectCardProps {
   project: Tables<"projects">;
 }
 
+/** Parse description — it may be stored as JSON `{"text":"...","tags":[...]}` or plain string */
+function parseDescription(raw: string | null): { text: string | null; tags: string[] } {
+  if (!raw) return { text: null, tags: [] };
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === "object" && parsed !== null) {
+      return {
+        text: typeof parsed.text === "string" ? parsed.text : null,
+        tags: Array.isArray(parsed.tags) ? parsed.tags : [],
+      };
+    }
+  } catch {
+    // not JSON — plain string
+  }
+  return { text: raw, tags: [] };
+}
+
 export function ProjectCard({ project }: ProjectCardProps) {
   const statusInfo = STATUS_LABELS[project.status] ?? {
     label: project.status,
     variant: "secondary" as const,
   };
 
+  const { text: descText, tags } = parseDescription(project.description);
+
   return (
     <Link href={`/projects/${project.id}`}>
       <Card className="transition-colors hover:border-primary/50">
         <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-          <CardTitle className="text-lg font-semibold">{project.name}</CardTitle>
+          <CardTitle className="text-lg font-semibold">{project.name?.trim()}</CardTitle>
           <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
         </CardHeader>
         <CardContent>
-          {project.description && (
+          {descText && (
             <p className="mb-2 line-clamp-2 text-sm text-muted-foreground">
-              {project.description}
+              {descText}
             </p>
+          )}
+          {tags.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1">
+              {tags.map((tag) => (
+                <Badge key={tag} variant="outline" className="text-xs">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
           )}
           <p className="text-xs text-muted-foreground">
             Created {new Date(project.created_at).toLocaleDateString()}

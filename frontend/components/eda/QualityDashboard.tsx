@@ -33,7 +33,9 @@ import {
   Loader2,
   Sparkles,
   ListChecks,
+  Wand2,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import type { Tables, Json } from "@/lib/types/database";
 
 type ColumnMapping = Tables<"column_mappings">;
@@ -44,6 +46,7 @@ interface QualityDashboardProps {
 }
 
 export function QualityDashboard({ datasetId, projectId }: QualityDashboardProps) {
+  const router = useRouter();
   const [mappingsByColumn, setMappingsByColumn] = useState<
     Record<string, ColumnMapping>
   >({});
@@ -536,6 +539,26 @@ export function QualityDashboard({ datasetId, projectId }: QualityDashboardProps
               })}
           </Accordion>
         </div>
+      )}
+
+      {/* Start Cleaning button — shown after results */}
+      {hasResults && !isRunning && (
+        <Card className="border-purple-200 dark:border-purple-900 bg-purple-50/50 dark:bg-purple-950/20">
+          <CardContent className="flex items-center justify-between p-4">
+            <div>
+              <p className="text-sm font-medium">Ready for Data Cleaning</p>
+              <p className="text-xs text-muted-foreground">
+                Review AI-generated cleaning suggestions based on quality analysis
+              </p>
+            </div>
+            <Button
+              onClick={() => router.push(`/projects/${projectId}/cleaning`)}
+            >
+              <Wand2 className="mr-2 h-4 w-4" />
+              Start Cleaning
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
       {/* Empty state */}

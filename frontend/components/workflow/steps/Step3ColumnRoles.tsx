@@ -627,7 +627,10 @@ export function Step3ColumnRoles({
                           handleRoleChange(mapping.id, val as ColumnRole)
                         }
                       >
-                        <SelectTrigger className="h-8 w-[10rem] text-xs">
+                        <SelectTrigger
+                          className="h-8 w-[10rem] text-xs"
+                          aria-label={`Role for column ${mapping.column_name}`}
+                        >
                           <SelectValue placeholder="Select role" />
                         </SelectTrigger>
                         <SelectContent>

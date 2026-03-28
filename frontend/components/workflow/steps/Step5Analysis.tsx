@@ -501,6 +501,11 @@ export function Step5Analysis({
             Run Analysis ({approvedCount})
           </Button>
         </div>
+        {!canRunAnalysis && plans.length > 0 && (
+          <p className="mt-2 text-xs text-muted-foreground text-right">
+            Approve at least one research question above to enable analysis
+          </p>
+        )}
       </div>
 
       {/* Auto-approve confirmation dialog */}

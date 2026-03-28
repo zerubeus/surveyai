@@ -337,14 +337,16 @@ export default function ReportPage() {
               size="lg"
               className="w-full sm:w-auto"
             >
-              <FileText className="mr-2 h-4 w-4" />
               {hasReport ? (
                 <>
                   <RefreshCw className="mr-2 h-4 w-4" />
                   Re-generate with {selectedTemplate.charAt(0).toUpperCase() + selectedTemplate.slice(1)} Template
                 </>
               ) : (
-                `Generate ${selectedTemplate.charAt(0).toUpperCase() + selectedTemplate.slice(1)} Report`
+                <>
+                  <FileText className="mr-2 h-4 w-4" />
+                  Generate {selectedTemplate.charAt(0).toUpperCase() + selectedTemplate.slice(1)} Report
+                </>
               )}
             </Button>
           )}
@@ -384,7 +386,7 @@ export default function ReportPage() {
 
         {/* Sidebar: Export panel */}
         <div className="space-y-4">
-          {isDrafted && (
+          {isDrafted && report && (
             <ExportPanel
               reportId={report.id}
               projectId={projectId}

@@ -75,7 +75,9 @@ export default function LoginPage() {
       <div className="w-full max-w-md px-4">
         <Card>
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl">SurveyAI Analyst</CardTitle>
+            <CardTitle asChild className="text-2xl">
+              <h1>SurveyAI Analyst</h1>
+            </CardTitle>
             <CardDescription>Sign in to your account</CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>

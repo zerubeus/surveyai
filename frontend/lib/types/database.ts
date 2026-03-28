@@ -1261,6 +1261,7 @@ export type Database = {
       analysis_status:
         | "planned"
         | "approved"
+        | "rejected"
         | "running"
         | "completed"
         | "failed";
