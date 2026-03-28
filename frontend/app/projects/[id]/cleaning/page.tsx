@@ -21,6 +21,7 @@ import {
   Sparkles,
   Loader2,
   Wand2,
+  ArrowRight,
 } from "lucide-react";
 import type { Tables } from "@/lib/types/database";
 
@@ -257,6 +258,16 @@ export default function CleaningPage() {
             appliedOperations={applied}
             onRefetch={refetchSuggestions}
           />
+        )}
+
+        {/* Proceed to Analysis */}
+        {hasSuggestions && (
+          <div className="flex justify-end pt-4">
+            <Button onClick={() => router.push(`/projects/${projectId}/analysis`)}>
+              Proceed to Analysis
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
         )}
       </div>
     </div>
