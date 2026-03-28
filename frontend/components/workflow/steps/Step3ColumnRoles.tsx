@@ -262,7 +262,7 @@ export function Step3ColumnRoles({
         return next;
       }
       // Select all in current view
-      return new Set([...prev, ...ids]);
+      return new Set([...Array.from(prev), ...Array.from(ids)]);
     });
   }, [filteredMappings]);
 
@@ -280,7 +280,7 @@ export function Step3ColumnRoles({
         .from("column_mappings")
         // @ts-expect-error — supabase update type inference
         .update({ confirmed_by: user.id, confirmed_at: now })
-        .in("id", [...selected]);
+        .in("id", Array.from(selected));
 
       if (error) throw new Error(error.message);
       setSelected(new Set());
@@ -536,8 +536,8 @@ export function Step3ColumnRoles({
         </div>
       )}
 
-      {/* Column table */}
-      <Card>
+      {/* Column table — desktop */}
+      <Card className="hidden md:block">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -574,7 +574,6 @@ export function Step3ColumnRoles({
                       isSelected ? "bg-blue-50/50" : ""
                     }`}
                   >
-                    {/* Checkbox */}
                     <td className="px-3 py-2.5">
                       <input
                         type="checkbox"
@@ -583,15 +582,11 @@ export function Step3ColumnRoles({
                         className="rounded border-gray-300"
                       />
                     </td>
-
-                    {/* Column name */}
                     <td className="px-3 py-2.5">
                       <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium">
                         {mapping.column_name}
                       </code>
                     </td>
-
-                    {/* Sample values */}
                     <td className="px-3 py-2.5">
                       <div className="flex flex-wrap gap-1">
                         {samples.length > 0 ? (
@@ -605,24 +600,17 @@ export function Step3ColumnRoles({
                             </Badge>
                           ))
                         ) : (
-                          <span className="text-xs text-muted-foreground">
-                            —
-                          </span>
+                          <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </div>
                     </td>
-
-                    {/* Data type */}
                     <td className="px-3 py-2.5">
                       <span className="text-xs text-muted-foreground">
                         {mapping.data_type
-                          ? DATA_TYPE_LABELS[mapping.data_type] ??
-                            mapping.data_type
+                          ? DATA_TYPE_LABELS[mapping.data_type] ?? mapping.data_type
                           : "—"}
                       </span>
                     </td>
-
-                    {/* Role dropdown */}
                     <td className="px-3 py-2.5">
                       <Select
                         value={mapping.role ?? undefined}
@@ -638,11 +626,7 @@ export function Step3ColumnRoles({
                         </SelectTrigger>
                         <SelectContent>
                           {ROLE_OPTIONS.map((opt) => (
-                            <SelectItem
-                              key={opt.value}
-                              value={opt.value}
-                              className="text-xs"
-                            >
+                            <SelectItem key={opt.value} value={opt.value} className="text-xs">
                               <div className="flex items-center gap-2">
                                 <opt.icon className="h-3.5 w-3.5 text-muted-foreground" />
                                 {opt.label}
@@ -652,8 +636,6 @@ export function Step3ColumnRoles({
                         </SelectContent>
                       </Select>
                     </td>
-
-                    {/* Confidence */}
                     <td className="px-3 py-2.5 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <span
@@ -665,8 +647,6 @@ export function Step3ColumnRoles({
                         </span>
                       </div>
                     </td>
-
-                    {/* Confirmed status */}
                     <td className="px-3 py-2.5 text-center">
                       {mapping.confirmed_by ? (
                         <CheckCircle2 className="mx-auto h-4 w-4 text-green-500" />
@@ -681,6 +661,102 @@ export function Step3ColumnRoles({
           </table>
         </div>
       </Card>
+
+      {/* Column cards — mobile */}
+      <div className="space-y-2 md:hidden">
+        {/* Mobile select-all header */}
+        <div className="flex items-center gap-2 px-1 pb-1">
+          <input
+            type="checkbox"
+            checked={allInViewSelected}
+            onChange={handleSelectAll}
+            className="rounded border-gray-300"
+          />
+          <span className="text-xs text-muted-foreground">
+            Select all ({filteredMappings.length} columns)
+          </span>
+        </div>
+        {filteredMappings.map((mapping) => {
+          const samples = getSampleValues(dataset, mapping.column_name);
+          const isSelected = selected.has(mapping.id);
+          return (
+            <Card
+              key={mapping.id}
+              className={`transition-colors ${isSelected ? "border-blue-300 bg-blue-50/50" : ""}`}
+            >
+              <CardContent className="p-3">
+                {/* Header row */}
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => handleSelectToggle(mapping.id)}
+                      className="mt-0.5 rounded border-gray-300"
+                    />
+                    <div>
+                      <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium">
+                        {mapping.column_name}
+                      </code>
+                      <div className="mt-0.5 flex items-center gap-1.5">
+                        <span className="text-xs text-muted-foreground">
+                          {mapping.data_type ? DATA_TYPE_LABELS[mapping.data_type] ?? mapping.data_type : "—"}
+                        </span>
+                        <span
+                          className={`inline-block h-2 w-2 rounded-full ${confidenceColor(mapping.detection_confidence)}`}
+                          title={confidenceLabel(mapping.detection_confidence)}
+                        />
+                        <span className="text-xs text-muted-foreground">
+                          {confidenceLabel(mapping.detection_confidence)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  {mapping.confirmed_by ? (
+                    <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-green-500" />
+                  ) : (
+                    <Eye className="h-4 w-4 flex-shrink-0 text-muted-foreground/40" />
+                  )}
+                </div>
+
+                {/* Sample values */}
+                {samples.length > 0 && (
+                  <div className="mb-2 flex flex-wrap gap-1">
+                    {samples.slice(0, 3).map((val, i) => (
+                      <Badge key={i} variant="secondary" className="max-w-[7rem] truncate text-xs font-normal">
+                        {val}
+                      </Badge>
+                    ))}
+                    {samples.length > 3 && (
+                      <span className="text-xs text-muted-foreground">+{samples.length - 3}</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Role dropdown */}
+                <Select
+                  value={mapping.role ?? undefined}
+                  onValueChange={(val) => handleRoleChange(mapping.id, val as ColumnRole)}
+                >
+                  <SelectTrigger className="h-8 w-full text-xs" aria-label={`Role for ${mapping.column_name}`}>
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ROLE_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                        <div className="flex items-center gap-2">
+                          <opt.icon className="h-3.5 w-3.5 text-muted-foreground" />
+                          {opt.label}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
 
       {/* Confirm All & Continue */}
       <Card className="border-blue-200 bg-blue-50/50">

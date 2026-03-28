@@ -77,7 +77,9 @@ export function useTaskProgress(taskId: string | null): TaskProgressState {
       setState({
         progress: data.progress,
         progressMessage: data.progress_message,
+        // @ts-expect-error — supabase status type inference
         status: data.status,
+        // @ts-expect-error — supabase result type inference
         result: data.result,
         error: data.error,
         isLoading: false,

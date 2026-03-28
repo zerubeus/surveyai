@@ -31,11 +31,12 @@ export default async function StepLayout({
     redirect("/auth/login");
   }
 
-  const { data: project } = await supabase
+  const { data: projectRaw } = await supabase
     .from("projects")
     .select("id, name, current_step, pipeline_status")
     .eq("id", params.id)
     .single();
+  const project = projectRaw as { id: string; name: string; current_step: number | null; pipeline_status: unknown } | null;
 
   if (!project) {
     notFound();

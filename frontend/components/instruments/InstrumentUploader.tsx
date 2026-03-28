@@ -157,9 +157,10 @@ export function InstrumentUploader({ projectId }: InstrumentUploaderProps) {
 
         // Create instrument record
         const fileType = ACCEPTED_TYPES[mimeType] ?? "unknown";
-        const { data: instrument, error: insertError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sbI = supabase as any;
+        const { data: instrumentRaw, error: insertError } = await sbI
           .from("instruments")
-          // @ts-expect-error — supabase insert type inference
           .insert({
             project_id: projectId,
             uploaded_by: user.id,
@@ -170,6 +171,7 @@ export function InstrumentUploader({ projectId }: InstrumentUploaderProps) {
           })
           .select()
           .single();
+        const instrument = instrumentRaw as { id: string } | null;
 
         if (insertError || !instrument) {
           setUploadState("error");

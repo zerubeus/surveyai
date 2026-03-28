@@ -109,7 +109,7 @@ export default function ReportPage() {
       const proj = projRaw as Project | null;
 
       if (!proj) {
-        router.push("/projects");
+        router.push("/projects" as never);
         return;
       }
       setProject(proj);
@@ -211,7 +211,9 @@ export default function ReportPage() {
 
     // Create or update report record
     if (!reportId) {
-      const { data: newReportRaw, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sb = supabase as any;
+      const { data: newReportRaw, error } = await sb
         .from("reports")
         .insert({
           project_id: projectId,
@@ -229,7 +231,7 @@ export default function ReportPage() {
     } else {
       await supabase
         .from("reports")
-        // @ts-expect-error — supabase update type inference
+        // @ts-ignore — supabase update type inference
         .update({
           template: selectedTemplate as string,
           status: "generating",

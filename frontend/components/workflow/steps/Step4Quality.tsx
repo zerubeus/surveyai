@@ -7,6 +7,7 @@ import { useQualityResults } from "@/hooks/useQualityResults";
 import { useCleaningSuggestions } from "@/hooks/useCleaningSuggestions";
 import { useDispatchTask } from "@/hooks/useDispatchTask";
 import { useTaskProgress } from "@/hooks/useTaskProgress";
+import { useProgressToast } from "@/hooks/useProgressToast";
 import { QualityCard } from "@/components/eda/QualityCard";
 import { LoadingSkeleton } from "@/components/workflow/LoadingSkeleton";
 import { Button } from "@/components/ui/button";
@@ -148,6 +149,11 @@ export function Step4Quality({
   const consistencyProgress = useTaskProgress(consistencyTaskId);
   const biasProgress = useTaskProgress(biasTaskId);
   const interpretProgress = useTaskProgress(interpretTaskId);
+
+  useProgressToast(edaProgress, { label: "Column profiling", thresholds: [50] });
+  useProgressToast(consistencyProgress, { label: "Consistency checks" });
+  useProgressToast(biasProgress, { label: "Bias detection" });
+  useProgressToast(interpretProgress, { label: "AI interpretation" });
 
   const { dispatchTask, isDispatching } = useDispatchTask();
 
@@ -917,6 +923,7 @@ function CleaningSuggestionsTab({
       .limit(1)
       .then(({ data }) => {
         if (data && data.length > 0) {
+          // @ts-ignore — supabase type inference
           setGenerateTaskId(data[0].id);
         }
       });
@@ -957,7 +964,7 @@ function CleaningSuggestionsTab({
         // First approve the operation
         await supabase
           .from("cleaning_operations")
-          // @ts-expect-error — supabase update type inference
+          // @ts-ignore — supabase update type inference
           .update({ status: "approved" as Enums<"cleaning_op_status"> })
           .eq("id", op.id);
 
@@ -981,7 +988,7 @@ function CleaningSuggestionsTab({
     async (op: CleaningOperation) => {
       await supabase
         .from("cleaning_operations")
-        // @ts-expect-error — supabase update type inference
+        // @ts-ignore — supabase update type inference
         .update({ status: "rejected" as Enums<"cleaning_op_status"> })
         .eq("id", op.id);
       // Move to next in one-at-a-time mode
@@ -996,7 +1003,7 @@ function CleaningSuggestionsTab({
     async (op: CleaningOperation) => {
       await supabase
         .from("cleaning_operations")
-        // @ts-expect-error — supabase update type inference
+        // @ts-ignore — supabase update type inference
         .update({ status: "undone" as Enums<"cleaning_op_status"> })
         .eq("id", op.id);
       toast("Operation undone", { variant: "success" });
@@ -1010,7 +1017,7 @@ function CleaningSuggestionsTab({
         const ids = ops.map((o) => o.id);
         await supabase
           .from("cleaning_operations")
-          // @ts-expect-error — supabase update type inference
+          // @ts-ignore — supabase update type inference
           .update({ status: "rejected" as Enums<"cleaning_op_status"> })
           .in("id", ids);
         toast(`Skipped ${ids.length} operations`, { variant: "default" });
@@ -1035,7 +1042,7 @@ function CleaningSuggestionsTab({
 
       await supabase
         .from("projects")
-        // @ts-expect-error — supabase update type inference
+        // @ts-ignore — supabase update type inference
         .update({
           current_step: 5,
           pipeline_status: pipelineStatus as unknown as Json,

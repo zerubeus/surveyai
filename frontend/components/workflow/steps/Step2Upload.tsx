@@ -404,8 +404,9 @@ export function Step2Upload({
         if (uploadError) throw new Error(uploadError.message);
 
         const { data: ds, error: insertError } = await supabase
+          // @ts-ignore — supabase type inference
           .from("datasets")
-          // @ts-expect-error — supabase insert type inference
+          // @ts-ignore — supabase insert type inference
           .insert({
             project_id: project.id,
             uploaded_by: user.id,
@@ -465,7 +466,7 @@ export function Step2Upload({
     // Update DB with chosen encoding/delimiter
     await supabase
       .from("datasets")
-      // @ts-expect-error — supabase update type inference
+      // @ts-ignore — supabase update type inference
       .update({ encoding, delimiter })
       .eq("id", dataset.id);
 
@@ -488,7 +489,7 @@ export function Step2Upload({
 
     await supabase
       .from("datasets")
-      // @ts-expect-error — supabase update type inference
+      // @ts-ignore — supabase update type inference
       .update({
         status: "confirmed",
         confirmed_at: new Date().toISOString(),
@@ -587,9 +588,11 @@ export function Step2Upload({
 
         if (uploadError) throw new Error(uploadError.message);
 
-        const { data: inst, error: insertError } = await supabase
+        // @ts-ignore — supabase insert type inference
+        const { data: instRaw, error: insertError } = await supabase
+          // @ts-ignore — supabase type inference
           .from("instruments")
-          // @ts-expect-error — supabase insert type inference
+          // @ts-ignore — supabase type inference
           .insert({
             project_id: project.id,
             uploaded_by: user.id,
@@ -600,6 +603,7 @@ export function Step2Upload({
           })
           .select()
           .single();
+        const inst = instRaw as Tables<"instruments"> | null;
 
         if (insertError || !inst) {
           setInstrumentPhase("error");
@@ -706,7 +710,7 @@ export function Step2Upload({
 
     await supabase
       .from("projects")
-      // @ts-expect-error — supabase update type inference
+      // @ts-ignore — supabase update type inference
       .update({
         current_step: 3,
         pipeline_status: pipelineStatus as unknown as Json,

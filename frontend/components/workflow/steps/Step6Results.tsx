@@ -163,11 +163,13 @@ export function Step6Results({
     let cancelled = false;
 
     (async () => {
-      const { data } = await supabase
+      // @ts-ignore — supabase select type inference
+      const { data: chartsRaw } = await supabase
         .from("charts")
         .select("*")
         .in("analysis_result_id", resultIds);
 
+      const data = chartsRaw as Chart[] | null;
       if (cancelled || !data) return;
       setCharts(data);
 

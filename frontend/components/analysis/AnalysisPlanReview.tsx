@@ -69,6 +69,7 @@ export function AnalysisPlanReview({
       try {
         await supabase
           .from("analysis_plans")
+          // @ts-expect-error — supabase update type inference
           .update(data)
           .eq("id", planId);
         onRefetch();

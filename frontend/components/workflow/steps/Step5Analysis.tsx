@@ -6,6 +6,7 @@ import { createBrowserClient } from "@/lib/supabase/browser";
 import { useAnalysisResults } from "@/hooks/useAnalysisResults";
 import { useDispatchTask } from "@/hooks/useDispatchTask";
 import { useTaskProgress } from "@/hooks/useTaskProgress";
+import { useProgressToast } from "@/hooks/useProgressToast";
 import { LoadingSkeleton } from "@/components/workflow/LoadingSkeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -139,6 +140,7 @@ export function Step5Analysis({
     initialRunningTaskIds["generate_analysis_plan"] ?? null,
   );
   const planProgress = useTaskProgress(planTaskId);
+  useProgressToast(planProgress, { label: "Analysis plan generation", thresholds: [50] });
   const { dispatchTask, isDispatching } = useDispatchTask();
 
   /* ---------- Analysis plans (Realtime) ---------- */
@@ -233,18 +235,19 @@ export function Step5Analysis({
         const updateData =
           newStatus === "approved"
             ? {
-                status: newStatus as const,
+                status: "approved" as const,
                 approved_by: user?.id ?? null,
                 approved_at: new Date().toISOString(),
               }
             : {
-                status: newStatus as const,
-                approved_by: null,
-                approved_at: null,
+                status: "rejected" as const,
+                approved_by: null as null,
+                approved_at: null as null,
               };
 
         const { error } = await supabase
           .from("analysis_plans")
+          // @ts-expect-error — supabase update type inference
           .update(updateData)
           .eq("id", planId);
 

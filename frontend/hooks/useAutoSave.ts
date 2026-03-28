@@ -28,7 +28,8 @@ export function useAutoSave(
       const { error } = await supabase
         .from(table)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .update({ [field]: val } as Record<string, unknown> as any)
+        // @ts-expect-error — supabase update type inference
+        .update({ [field]: val } as Record<string, unknown>)
         .eq("id", id);
 
       if (error) {

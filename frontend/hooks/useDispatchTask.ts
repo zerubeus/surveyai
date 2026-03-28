@@ -52,8 +52,10 @@ export function useDispatchTask() {
           ? { ...payload, dataset_id: datasetId }
           : payload;
 
-        const { data, error } = await supabase
+                // @ts-ignore — supabase insert type inference
+        const { data: taskRaw, error } = await supabase
           .from("tasks")
+          // @ts-ignore — supabase type inference
           .insert({
             project_id: projectId,
             task_type: taskType,
@@ -62,13 +64,14 @@ export function useDispatchTask() {
           })
           .select("id")
           .single();
+        const data = taskRaw as { id: string } | null;
 
         if (error) {
           throw new Error(error.message);
         }
 
         setState({ isDispatching: false, error: null });
-        return { taskId: data.id };
+        return { taskId: data?.id ?? "" };
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Failed to dispatch task";

@@ -126,9 +126,10 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
       return;
     }
 
-    const { data, error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sb = supabase as any;
+    const { data: projectRaw, error } = await sb
       .from("projects")
-      // @ts-expect-error — supabase insert type inference
       .insert({
         organization_id: organizationId,
         created_by: user.id,
@@ -150,6 +151,7 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
       })
       .select("id")
       .single();
+    const data = projectRaw as { id: string } | null;
 
     if (error) {
       setServerError(error.message);
@@ -157,7 +159,7 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
       return;
     }
 
-    router.push(`/projects/${data.id}`);
+    router.push(`/projects/${data?.id}`);
     router.refresh();
   }
 

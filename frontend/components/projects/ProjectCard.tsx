@@ -74,7 +74,6 @@ export function ProjectCard({ project, onDeleted }: ProjectCardProps) {
     e.preventDefault();
     e.stopPropagation();
     setIsDeleting(true);
-    // @ts-expect-error — supabase delete type inference
     await supabase.from("projects").delete().eq("id", project.id);
     setIsDeleting(false);
     setShowConfirm(false);

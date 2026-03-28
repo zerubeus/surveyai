@@ -38,14 +38,14 @@ function BoxPlot({ profile }: { profile: Record<string, Json> }) {
         {/* Mean dot */}
         <circle cx={toX(mean)} cy={20} r={3} fill="#f59e0b" />
         {/* Labels */}
-        <text x={toX(min)} y={38} fontSize={8} fill="#94a3b8" textAnchor="middle">{typeof profile.min === 'number' ? profile.min.toFixed(1) : profile.min}</text>
-        <text x={toX(max)} y={38} fontSize={8} fill="#94a3b8" textAnchor="middle">{typeof profile.max === 'number' ? (profile.max as number).toFixed(1) : profile.max}</text>
-        <text x={toX(median)} y={7} fontSize={8} fill="#3b82f6" textAnchor="middle">med {typeof median === 'number' ? median.toFixed(1) : median}</text>
+        <text x={toX(min)} y={38} fontSize={8} fill="#94a3b8" textAnchor="middle">{typeof profile.min === 'number' ? profile.min.toFixed(1) : String(profile.min ?? '')}</text>
+        <text x={toX(max)} y={38} fontSize={8} fill="#94a3b8" textAnchor="middle">{typeof profile.max === 'number' ? (profile.max as number).toFixed(1) : String(profile.max ?? '')}</text>
+        <text x={toX(median)} y={7} fontSize={8} fill="#3b82f6" textAnchor="middle">med {typeof median === 'number' ? median.toFixed(1) : String(median)}</text>
       </svg>
       <div className="mt-1 flex gap-4 text-xs text-muted-foreground">
-        <span>μ={typeof profile.mean === 'number' ? (profile.mean as number).toFixed(2) : profile.mean}</span>
-        <span>σ={typeof profile.std === 'number' ? (profile.std as number).toFixed(2) : profile.std}</span>
-        <span>skew={typeof profile.skewness === 'string' ? profile.skewness : ''}</span>
+        <span>μ={typeof profile.mean === 'number' ? (profile.mean as number).toFixed(2) : String(profile.mean ?? '')}</span>
+        <span>σ={typeof profile.std === 'number' ? (profile.std as number).toFixed(2) : String(profile.std ?? '')}</span>
+        <span>skew={typeof profile.skewness === 'string' ? profile.skewness : String(profile.skewness ?? '')}</span>
         {Number(profile.outlier_count) > 0 && <span className="text-yellow-600">⚠ {String(profile.outlier_count)} outliers</span>}
       </div>
     </div>

@@ -5,6 +5,7 @@ import { createBrowserClient } from "@/lib/supabase/browser";
 import { useReport } from "@/hooks/useReport";
 import { useDispatchTask } from "@/hooks/useDispatchTask";
 import { useTaskProgress } from "@/hooks/useTaskProgress";
+import { useProgressToast } from "@/hooks/useProgressToast";
 import { LoadingSkeleton } from "@/components/workflow/LoadingSkeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -145,6 +146,8 @@ export function Step7Report({
   );
   const generateProgress = useTaskProgress(generateTaskId);
   const exportProgress = useTaskProgress(exportTaskId);
+  useProgressToast(generateProgress, { label: "Report generation", thresholds: [30, 60, 90] });
+  useProgressToast(exportProgress, { label: "Export" });
   const { dispatchTask, isDispatching } = useDispatchTask();
 
   /* ---------- Report data ---------- */
@@ -257,12 +260,14 @@ export function Step7Report({
       } = await supabase.auth.getUser();
 
       // Get current dataset
-      const { data: datasets } = await supabase
+      // @ts-ignore — supabase type inference
+      const { data: datasetsRaw } = await supabase
         .from("datasets")
         .select("id")
         .eq("project_id", projectId)
         .eq("is_current", true)
         .limit(1);
+      const datasets = datasetsRaw as Array<{ id: string }> | null;
       const datasetId = datasets?.[0]?.id;
       if (!datasetId) {
         toast("No confirmed dataset found. Please complete Step 2 first.", { variant: "error" });
@@ -274,8 +279,10 @@ export function Step7Report({
       if (report?.id) {
         reportId = report.id;
       } else {
-        const { data: newReport, error: reportErr } = await supabase
+        // @ts-ignore — supabase type inference
+        const { data: newReportRaw, error: reportErr } = await supabase
           .from("reports")
+          // @ts-ignore — supabase type inference
           .insert({
             project_id: projectId,
             dataset_id: datasetId,
@@ -285,6 +292,7 @@ export function Step7Report({
           })
           .select("id")
           .single();
+        const newReport = newReportRaw as { id: string } | null;
         if (reportErr || !newReport) {
           throw new Error(reportErr?.message ?? "Failed to create report record");
         }
@@ -311,13 +319,15 @@ export function Step7Report({
         return;
       }
       try {
-        const { data: datasets } = await supabase
+        // @ts-ignore — supabase type inference
+        const { data: datasetsRaw2 } = await supabase
           .from("datasets")
           .select("id")
           .eq("project_id", projectId)
           .eq("is_current", true)
           .limit(1);
-        const datasetId = datasets?.[0]?.id;
+        const datasets2 = datasetsRaw2 as Array<{ id: string }> | null;
+        const datasetId = datasets2?.[0]?.id;
 
         const { taskId } = await dispatchTask(projectId, "generate_report", {
           template,
@@ -346,8 +356,10 @@ export function Step7Report({
           ? { title: editingTitle }
           : { content: editingContent };
 
+      // @ts-ignore — supabase update type inference
       const { error } = await supabase
         .from("report_sections")
+        // @ts-ignore — supabase type inference
         .update(updateData)
         .eq("id", selectedSectionId);
 
@@ -371,12 +383,12 @@ export function Step7Report({
       await Promise.all([
         supabase
           .from("report_sections")
-          // @ts-expect-error — supabase update type inference
+          // @ts-ignore — supabase update type inference
           .update({ sort_order: swap.sort_order })
           .eq("id", current.id),
         supabase
           .from("report_sections")
-          // @ts-expect-error — supabase update type inference
+          // @ts-ignore — supabase update type inference
           .update({ sort_order: current.sort_order })
           .eq("id", swap.id),
       ]);

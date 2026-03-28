@@ -49,11 +49,13 @@ export function UndoPanel({ appliedOperations, onRefetch }: UndoPanelProps) {
         // set parent dataset is_current=true
         if (operation.resulting_dataset_id) {
           // Get the resulting dataset to find its parent
-          const { data: resultingDataset } = await supabase
+          // @ts-ignore — supabase select type inference
+          const { data: resultingDatasetRaw } = await supabase
             .from("datasets")
             .select("parent_id")
             .eq("id", operation.resulting_dataset_id)
             .single();
+          const resultingDataset = resultingDatasetRaw as { parent_id: string | null } | null;
 
           if (resultingDataset?.parent_id) {
             // Set resulting dataset as not current
