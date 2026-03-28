@@ -1,0 +1,93 @@
+{
+  "common": {
+    "appName": "Chisquare",
+    "signIn": "Se connecter",
+    "signOut": "Se déconnecter",
+    "signUp": "S'inscrire",
+    "getStarted": "Commencer",
+    "loading": "Chargement…",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "confirm": "Confirmer",
+    "back": "Retour",
+    "next": "Suivant",
+    "continue": "Continuer",
+    "close": "Fermer",
+    "retry": "Réessayer"
+  },
+  "auth": {
+    "welcomeBack": "Bienvenue",
+    "signInDesc": "Connectez-vous à votre compte pour continuer",
+    "signUpDesc": "Commencez à analyser vos données d'enquête en quelques minutes",
+    "email": "Adresse e-mail",
+    "password": "Mot de passe",
+    "confirmPassword": "Confirmer le mot de passe",
+    "forgotPassword": "Mot de passe oublié ?",
+    "noAccount": "Pas encore de compte ?",
+    "hasAccount": "Déjà un compte ?",
+    "signUpFree": "S'inscrire gratuitement",
+    "checkEmail": "Vérifiez votre e-mail",
+    "checkEmailDesc": "Nous avons envoyé un lien de confirmation à {email}. Cliquez sur le lien pour activer votre compte.",
+    "resetPassword": "Réinitialiser votre mot de passe",
+    "resetPasswordDesc": "Entrez votre e-mail et nous vous enverrons un lien de réinitialisation",
+    "sendResetLink": "Envoyer le lien",
+    "updatePassword": "Mettre à jour le mot de passe",
+    "chooseNewPassword": "Choisir un nouveau mot de passe",
+    "orSignInWith": "ou se connecter avec un e-mail",
+    "orSignUpWith": "ou s'inscrire avec un e-mail",
+    "googleSignIn": "Se connecter avec Google",
+    "googleSignUp": "S'inscrire avec Google"
+  },
+  "dashboard": {
+    "title": "Projets",
+    "subtitle": "Gérer vos projets d'analyse d'enquête",
+    "newProject": "Nouveau Projet",
+    "welcome": "Bienvenue sur Chisquare",
+    "welcomeDesc": "Téléchargez votre jeu de données, répondez à quelques questions sur votre étude, et laissez l'IA planifier et exécuter l'analyse.",
+    "startProject": "Créer un nouveau projet",
+    "readGuide": "Lire le guide d'utilisation",
+    "analysisTypes": "Analyses disponibles"
+  },
+  "project": {
+    "brief": "Fiche Projet",
+    "briefDesc": "Définissez la portée et les objectifs de votre projet. Tous les champs sont enregistrés automatiquement.",
+    "name": "Nom du projet",
+    "objective": "Objectif",
+    "researchQuestions": "Questions de recherche",
+    "samplingMethod": "Méthode d'échantillonnage",
+    "targetPopulation": "Population cible",
+    "reportAudience": "Public cible du rapport",
+    "tour": "? Visite guidée"
+  },
+  "steps": {
+    "1": "Fiche Projet",
+    "2": "Téléchargement",
+    "3": "Colonnes",
+    "4": "Qualité",
+    "5": "Analyse",
+    "6": "Résultats",
+    "7": "Rapport"
+  },
+  "analysis": {
+    "addCustom": "Ajouter une analyse personnalisée (ex. régression linéaire)",
+    "runAnalysis": "Lancer l'analyse",
+    "rerun": "Relancer",
+    "noResults": "Pas encore de résultats d'analyse"
+  },
+  "report": {
+    "generate": "Générer le rapport",
+    "viewResults": "Voir les résultats d'analyse",
+    "shareLink": "Partager le rapport (lecture seule)",
+    "exportDocx": "Exporter DOCX",
+    "exportPdf": "Exporter PDF",
+    "generateLink": "Générer un lien"
+  },
+  "landing": {
+    "heroTitle": "De vos données d'enquête à un rapport prêt à publier en quelques heures.",
+    "heroSubtitle": "Chisquare automatise l'intégralité du pipeline d'analyse — AED, détection des biais, tests statistiques et rapports rédigés par IA — pour les ONG, les cabinets de recherche et les équipes universitaires.",
+    "startFree": "Commencer l'analyse gratuitement",
+    "seeHow": "Voir comment ça marche",
+    "noCard": "Sans carte bancaire · Conforme RGPD · Compatible CSV, Excel, XLSForm"
+  }
+}

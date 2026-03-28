@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { useOnboardingTour } from "@/hooks/useOnboardingTour";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/browser";
 import { useAutoSave } from "@/hooks/useAutoSave";
@@ -150,6 +151,9 @@ interface Step1FormProps {
 export function Step1Form({ project }: Step1FormProps) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
+  // Show onboarding tour for first-time users (when project was just created = no pipeline steps done)
+  const isNewProject = !project.pipeline_status || Object.keys(project.pipeline_status as Record<string, unknown>).length === 0;
+  const { restartTour } = useOnboardingTour(1, isNewProject);
 
   // -- form state --
   const [name, setName] = useState(project.name);
@@ -289,7 +293,17 @@ export function Step1Form({ project }: Step1FormProps) {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h2 className="text-2xl font-bold">Project Brief</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold">Project Brief</h2>
+          <button
+            type="button"
+            onClick={restartTour}
+            className="text-xs text-blue-600 hover:underline underline-offset-2"
+            title="Restart the guided tour"
+          >
+            ? Tour
+          </button>
+        </div>
         <p className="mt-1 text-sm text-muted-foreground">
           Define your project scope and research goals. All fields auto-save.
         </p>

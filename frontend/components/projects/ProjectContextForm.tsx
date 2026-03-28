@@ -181,6 +181,7 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
           <div className="space-y-2">
             <Label htmlFor="name">Project Name</Label>
             <Input
+              data-tour="project-name"
               id="name"
               value={form.name}
               onChange={(e) => updateField("name", e.target.value)}
@@ -233,7 +234,7 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
       {/* Research Questions */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Research Questions</CardTitle>
+          <CardTitle className="text-lg" data-tour="research-questions">Research Questions</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* RQ templates — shown when at least one objective tag matches */}

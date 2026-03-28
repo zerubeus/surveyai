@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createServerClient } from "@/lib/supabase/server";
 import { SignOutButton } from "@/components/auth/SignOutButton";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 export default async function DashboardLayout({
   children,
@@ -23,6 +24,7 @@ export default async function DashboardLayout({
             {user && (
               <span className="text-sm text-muted-foreground">{user.email}</span>
             )}
+            <LanguageSwitcher />
             <SignOutButton />
           </div>
         </div>

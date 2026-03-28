@@ -465,19 +465,31 @@ def _draft_rq_synthesis(
     for rq_text, results in rq_groups.items():
         sig_results = [r for r in results if (r.get("p_value") or 1.0) < 0.05]
         non_sig = [r for r in results if (r.get("p_value") or 1.0) >= 0.05]
+        # Aggregate missing data across variables in this RQ
+        missing_warnings = []
+        for r in results:
+            mdr = r.get("missing_data_rate") or 0.0
+            if mdr > 0.15:
+                dep = r.get("dependent_variable", "outcome")
+                missing_warnings.append(f"{dep}: {round(mdr*100)}% missing")
+
         synthesis_data.append({
             "rq": rq_text,
             "total_tests": len(results),
             "significant": len(sig_results),
             "non_significant": len(non_sig),
+            "missing_data_warnings": missing_warnings,
             "results": [
                 {
-                    "test": r.get("selected_test"),
+                    "test": r.get("test_name") or r.get("selected_test"),
                     "dep": r.get("dependent_variable"),
                     "indep": r.get("independent_variable"),
                     "p_value": r.get("p_value"),
-                    "effect_size": r.get("effect_size"),
+                    "effect_size_value": r.get("effect_size_value"),
+                    "effect_size_name": r.get("effect_size_name"),
                     "effect_interpretation": r.get("effect_size_interpretation"),
+                    "confidence_interval": r.get("confidence_interval"),
+                    "missing_data_rate": r.get("missing_data_rate"),
                     "significant": (r.get("p_value") or 1.0) < 0.05,
                 }
                 for r in results
@@ -498,13 +510,15 @@ def _draft_rq_synthesis(
 ## RULES
 1. For EACH research question, write ONE paragraph (3–5 sentences) that:
    - Directly answers the RQ (yes/no/mixed evidence)
-   - References the specific statistics that support the answer (exact p-values, effect sizes)
+   - References the specific statistics that support the answer (exact p-values, effect sizes, confidence intervals where available)
    - Notes practical significance, not just statistical significance
    - Mentions non-significant findings briefly if relevant
 2. {causal_rule}
 3. Use bullet sub-points for individual test results, then conclude with a synthesis sentence.
 4. Use clear headings: "**RQ1: [abbreviated question]**"
 5. Keep language appropriate for a {template} audience.
+6. IMPORTANT: If missing_data_warnings is non-empty for an RQ, add a caveats paragraph: "⚠️ Data quality note: [variable] had X% missing values — interpret results with caution."
+7. If confidence intervals are available, mention them: "95% CI [lower, upper]".
 
 Return JSON with:
 - "content": string (markdown, with RQ headings and paragraphs)

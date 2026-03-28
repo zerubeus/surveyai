@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import {
   BarChart3,
   Brain,
@@ -128,6 +129,7 @@ export default function LandingPage() {
             <Link href="/privacy" className="text-gray-600 hover:text-gray-900">Privacy</Link>
           </div>
           <div className="flex items-center gap-3">
+            <LanguageSwitcher />
             <Link href="/auth/login">
               <Button variant="ghost" size="sm">Sign in</Button>
             </Link>

@@ -1,0 +1,93 @@
+{
+  "common": {
+    "appName": "Chisquare",
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "signUp": "Sign up",
+    "getStarted": "Get started",
+    "loading": "Loading…",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "back": "Back",
+    "next": "Next",
+    "continue": "Continue",
+    "close": "Close",
+    "retry": "Try again"
+  },
+  "auth": {
+    "welcomeBack": "Welcome back",
+    "signInDesc": "Sign in to your account to continue",
+    "signUpDesc": "Start analysing survey data in minutes",
+    "email": "Email address",
+    "password": "Password",
+    "confirmPassword": "Confirm password",
+    "forgotPassword": "Forgot password?",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?",
+    "signUpFree": "Sign up free",
+    "checkEmail": "Check your email",
+    "checkEmailDesc": "We sent a confirmation link to {email}. Click the link to activate your account.",
+    "resetPassword": "Reset your password",
+    "resetPasswordDesc": "Enter your email and we'll send a reset link",
+    "sendResetLink": "Send reset link",
+    "updatePassword": "Update password",
+    "chooseNewPassword": "Choose a new password",
+    "orSignInWith": "or sign in with email",
+    "orSignUpWith": "or sign up with email",
+    "googleSignIn": "Sign in with Google",
+    "googleSignUp": "Sign up with Google"
+  },
+  "dashboard": {
+    "title": "Projects",
+    "subtitle": "Manage your survey analysis projects",
+    "newProject": "New Project",
+    "welcome": "Welcome to Chisquare",
+    "welcomeDesc": "Upload your survey dataset, answer a few questions about your study, and let the AI plan and run the analysis.",
+    "startProject": "Start a new project",
+    "readGuide": "Read the setup guide",
+    "analysisTypes": "Supported analyses"
+  },
+  "project": {
+    "brief": "Project Brief",
+    "briefDesc": "Define your project scope and research goals. All fields auto-save.",
+    "name": "Project Name",
+    "objective": "Objective",
+    "researchQuestions": "Research Questions",
+    "samplingMethod": "Sampling Method",
+    "targetPopulation": "Target Population",
+    "reportAudience": "Report Audience",
+    "tour": "? Tour"
+  },
+  "steps": {
+    "1": "Project Brief",
+    "2": "Upload",
+    "3": "Map Columns",
+    "4": "Quality",
+    "5": "Analysis",
+    "6": "Results",
+    "7": "Report"
+  },
+  "analysis": {
+    "addCustom": "Add custom analysis (e.g. linear regression)",
+    "runAnalysis": "Run Analysis",
+    "rerun": "Re-run",
+    "noResults": "No analysis results yet"
+  },
+  "report": {
+    "generate": "Generate Report",
+    "viewResults": "View analysis results",
+    "shareLink": "Share report (read-only)",
+    "exportDocx": "Export DOCX",
+    "exportPdf": "Export PDF",
+    "generateLink": "Generate link"
+  },
+  "landing": {
+    "heroTitle": "From survey data to publication-ready reports in hours, not weeks.",
+    "heroSubtitle": "Chisquare automates the entire analysis pipeline — EDA, bias detection, statistical testing, and AI-drafted reports — for NGOs, research firms, and academic teams.",
+    "startFree": "Start analysing for free",
+    "seeHow": "See how it works",
+    "noCard": "No credit card required · GDPR-ready · Works with CSV, Excel, XLSForm"
+  }
+}
