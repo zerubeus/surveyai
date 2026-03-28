@@ -49,16 +49,62 @@ signal.signal(signal.SIGINT, handle_signal)
 # Worker instance ID (unique per container)
 WORKER_ID = os.getenv("WORKER_ID", f"worker-{os.getpid()}")
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "2"))
+# Tasks claimed but not completed after this many minutes are reset to pending
+STALE_TASK_TIMEOUT_MINUTES = int(os.getenv("STALE_TASK_TIMEOUT_MINUTES", "10"))
+# Max runtime for any single task (minutes) — task is failed if exceeded
+MAX_TASK_RUNTIME_MINUTES = int(os.getenv("MAX_TASK_RUNTIME_MINUTES", "15"))
+
+
+def recover_stale_tasks(db: SupabaseDB) -> None:
+    """Reset tasks that were claimed but haven't progressed past 0% in N minutes."""
+    try:
+        stale = (
+            db.client.table("tasks")
+            .select("id, task_type, claimed_by, claimed_at")
+            .eq("status", "claimed")
+            .lt("progress", 5)
+            .lt("claimed_at", f"now() - interval '{STALE_TASK_TIMEOUT_MINUTES} minutes'")
+            .execute()
+            .data or []
+        )
+        for task in stale:
+            db.client.table("tasks").update({
+                "status": "pending",
+                "claimed_by": None,
+                "claimed_at": None,
+                "error": f"Stale: claimed by {task.get('claimed_by')} with no progress, reset after {STALE_TASK_TIMEOUT_MINUTES}m",
+                "updated_at": "now()",
+            }).eq("id", task["id"]).execute()
+            logger.warning(
+                "stale_task_reset",
+                task_id=task["id"],
+                task_type=task.get("task_type"),
+                claimed_by=task.get("claimed_by"),
+            )
+    except Exception as e:
+        logger.error("stale_recovery_failed", error=str(e))
 
 
 def main() -> None:
     """Main polling loop for the worker service."""
-    logger.info("worker_starting", worker_id=WORKER_ID, poll_interval=POLL_INTERVAL)
+    logger.info(
+        "worker_starting",
+        worker_id=WORKER_ID,
+        poll_interval=POLL_INTERVAL,
+        stale_timeout_min=STALE_TASK_TIMEOUT_MINUTES,
+        max_runtime_min=MAX_TASK_RUNTIME_MINUTES,
+    )
 
     db = SupabaseDB()
+    poll_count = 0
 
     while not shutdown_requested:
         try:
+            # Recover stale tasks every 30 polls (~60s at 2s interval)
+            poll_count += 1
+            if poll_count % 30 == 0:
+                recover_stale_tasks(db)
+
             # Attempt to claim the next pending task
             task = db.claim_next_task(WORKER_ID)
 
@@ -82,12 +128,33 @@ def main() -> None:
                 worker_id=WORKER_ID,
             )
 
-            # Dispatch to the appropriate handler
-            # Handlers will be implemented in subsequent sprints
+            # Dispatch to the appropriate handler with max runtime enforcement
             try:
+                import threading
                 db.update_task_progress(task_id, 0, f"Starting {task_type}")
-                handle_task(db, task_id, task_type, payload)
-                logger.info("task_completed", task_id=task_id, task_type=task_type)
+
+                task_exception: list[Exception] = []
+
+                def run_task() -> None:
+                    try:
+                        handle_task(db, task_id, task_type, payload)
+                    except Exception as exc:
+                        task_exception.append(exc)
+
+                thread = threading.Thread(target=run_task, daemon=True)
+                thread.start()
+                thread.join(timeout=MAX_TASK_RUNTIME_MINUTES * 60)
+
+                if thread.is_alive():
+                    # Task exceeded max runtime
+                    error_msg = f"Task exceeded maximum runtime of {MAX_TASK_RUNTIME_MINUTES} minutes"
+                    logger.error("task_timeout", task_id=task_id, task_type=task_type)
+                    db.fail_task(task_id, error_msg)
+                elif task_exception:
+                    raise task_exception[0]
+                else:
+                    logger.info("task_completed", task_id=task_id, task_type=task_type)
+
             except Exception as e:
                 logger.error(
                     "task_failed",

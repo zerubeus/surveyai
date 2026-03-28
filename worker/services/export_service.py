@@ -50,6 +50,13 @@ def export_report(db: SupabaseDB, task_id: str, payload: dict[str, Any]) -> None
     project = db.get_project(report["project_id"])
     project_name = project["name"] if project else "Report"
 
+    # Build a safe filename from project name + template
+    import re
+    _safe_project = re.sub(r"[^a-zA-Z0-9_\-]", "_", project_name.replace(" ", "_"))[:40]
+    _template = report.get("template", "report").capitalize()
+    _year = datetime.now().year
+    export_basename = f"{_safe_project}_{_template}_{_year}"
+
     sections = db.select("report_sections", filters={"report_id": report_id})
     sections.sort(key=lambda s: s.get("sort_order", 0))
 
@@ -63,7 +70,7 @@ def export_report(db: SupabaseDB, task_id: str, payload: dict[str, Any]) -> None
     if "docx" in formats:
         db.update_task_progress(task_id, 20, "Generating DOCX...")
         docx_bytes = _generate_docx(report, project_name, sections, chart_images)
-        docx_path = f"{created_by}/{report['project_id']}/report_{report_id}.docx"
+        docx_path = f"{created_by}/{report['project_id']}/{export_basename}.docx"
 
         db.upload_file("reports", docx_path, docx_bytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
         signed_url = db.get_signed_url("reports", docx_path, expires_in=604800)
@@ -89,7 +96,7 @@ def export_report(db: SupabaseDB, task_id: str, payload: dict[str, Any]) -> None
     if "pdf" in formats:
         db.update_task_progress(task_id, 60, "Generating PDF...")
         pdf_bytes = _generate_pdf(report, project_name, sections, chart_images)
-        pdf_path = f"{created_by}/{report['project_id']}/report_{report_id}.pdf"
+        pdf_path = f"{created_by}/{report['project_id']}/{export_basename}.pdf"
 
         db.upload_file("reports", pdf_path, pdf_bytes, "application/pdf")
         signed_url = db.get_signed_url("reports", pdf_path, expires_in=604800)

@@ -16,10 +16,12 @@ import {
   CardDescription,
   CardTitle,
 } from "@/components/ui/card";
+import Link from "next/link";
 import {
   AlertCircle,
   ArrowDown,
   ArrowUp,
+  BarChart3,
   Building2,
   Download,
   FileOutput,
@@ -585,6 +587,17 @@ export function Step7Report({
           </CardContent>
         </Card>
       )}
+
+      {/* Quick nav: back to analysis results */}
+      <div className="flex items-center justify-end">
+        <Link
+          href={`/projects/${project.id}/step/6`}
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+        >
+          <BarChart3 className="h-3.5 w-3.5" />
+          View analysis results
+        </Link>
+      </div>
 
       {/* Main editor: left panel + main panel */}
       <div className="flex gap-4 min-h-[500px]">

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/browser";
 import { useAnalysisResults } from "@/hooks/useAnalysisResults";
 import { useTaskProgress } from "@/hooks/useTaskProgress";
+import { useDispatchTask } from "@/hooks/useDispatchTask";
 import { LoadingSkeleton } from "@/components/workflow/LoadingSkeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,7 @@ import {
   TrendingUp,
   XCircle,
   MinusCircle,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import type { Tables, Json } from "@/lib/types/database";
@@ -129,6 +131,8 @@ export function Step6Results({
   /* ---------- Task tracking ---------- */
   const [taskId] = useState<string | null>(initialRunningTaskId);
   const taskProgress = useTaskProgress(taskId);
+  const { dispatchTask } = useDispatchTask();
+  const [rerunningTestIds, setRerunningTestIds] = useState<Set<string>>(new Set());
 
   /* ---------- Analysis data ---------- */
   const { plans, results, isLoading } = useAnalysisResults(datasetId);
@@ -296,6 +300,32 @@ export function Step6Results({
       return next;
     });
   }, []);
+
+  const handleRerunTest = useCallback(async (planId: string, resultId: string) => {
+    if (!datasetId) return;
+    setRerunningTestIds((prev) => new Set([...Array.from(prev), resultId]));
+    try {
+      // Re-approve the plan and dispatch a targeted analysis run
+      const supabase = createBrowserClient();
+      // @ts-ignore — supabase update type inference
+      await supabase.from("analysis_plans").update({ status: "approved" }).eq("id", planId);
+      await dispatchTask(project.id, "run_analysis", {
+        dataset_id: datasetId,
+        project_id: project.id,
+        plan_ids: [planId],
+        rerun: true,
+      }, datasetId);
+      toast("Test queued for re-run", { variant: "success" });
+    } catch {
+      toast("Failed to queue re-run", { variant: "error" });
+    } finally {
+      setRerunningTestIds((prev) => {
+        const next = new Set(prev);
+        next.delete(resultId);
+        return next;
+      });
+    }
+  }, [datasetId, project.id, dispatchTask]);
 
   const handleProceedToReport = useCallback(async () => {
     setIsAdvancing(true);
@@ -581,6 +611,8 @@ export function Step6Results({
                   handleInterpretationBlur(result.id)
                 }
                 onToggleAssumptions={() => toggleAssumptions(result.id)}
+                onRerunTest={() => handleRerunTest(plan.id, result.id)}
+                isRerunning={rerunningTestIds.has(result.id)}
               />
             ))}
           </CardContent>
@@ -649,6 +681,8 @@ interface ResultCardProps {
   onInterpretationChange: (value: string) => void;
   onInterpretationBlur: () => void;
   onToggleAssumptions: () => void;
+  onRerunTest?: () => void;
+  isRerunning?: boolean;
 }
 
 function ResultCard({
@@ -663,6 +697,8 @@ function ResultCard({
   onInterpretationChange,
   onInterpretationBlur,
   onToggleAssumptions,
+  onRerunTest,
+  isRerunning = false,
 }: ResultCardProps) {
   const magnitude = effectSizeMagnitude(
     result.effect_size_value,
@@ -847,6 +883,24 @@ function ResultCard({
             }`}
           />
         </button>
+
+        {/* Re-run button */}
+        {onRerunTest && (
+          <button
+            type="button"
+            onClick={onRerunTest}
+            disabled={isRerunning}
+            className="ml-2 inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+            title="Re-run this test"
+          >
+            {isRerunning ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3" />
+            )}
+            Re-run
+          </button>
+        )}
       </div>
     </div>
   );
