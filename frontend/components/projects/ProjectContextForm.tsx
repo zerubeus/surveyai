@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select } from "@/components/ui/select";
+// Note: Native <select> used below (not the Radix Select) for simplicity
 import {
   Card,
   CardContent,
@@ -128,6 +128,7 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
 
     const { data, error } = await supabase
       .from("projects")
+      // @ts-expect-error — supabase insert type inference
       .insert({
         organization_id: organizationId,
         created_by: user.id,
@@ -297,7 +298,8 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
 
           <div className="space-y-2">
             <Label htmlFor="sampling_method">Sampling Method</Label>
-            <Select
+            <select
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none"
               id="sampling_method"
               value={form.sampling_method}
               onChange={(e) =>
@@ -312,7 +314,7 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
                   {m.label}
                 </option>
               ))}
-            </Select>
+            </select>
           </div>
 
           <div className="space-y-2">
@@ -371,7 +373,8 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="report_audience">Report Audience</Label>
-            <Select
+            <select
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none"
               id="report_audience"
               value={form.report_audience}
               onChange={(e) =>
@@ -386,12 +389,13 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
                   {a.label}
                 </option>
               ))}
-            </Select>
+            </select>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="instrument_language">Instrument Language</Label>
-            <Select
+            <select
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none"
               id="instrument_language"
               value={form.instrument_language}
               onChange={(e) => updateField("instrument_language", e.target.value)}
@@ -401,7 +405,7 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
                   {l.label}
                 </option>
               ))}
-            </Select>
+            </select>
           </div>
         </CardContent>
       </Card>

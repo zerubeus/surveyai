@@ -273,6 +273,7 @@ export function Step6Results({
 
       const { error } = await supabase
         .from("analysis_results")
+        // @ts-expect-error — supabase update type inference
         .update({ interpretation: value, interpretation_validated: true })
         .eq("id", resultId);
 
@@ -305,6 +306,7 @@ export function Step6Results({
 
       await supabase
         .from("projects")
+        // @ts-expect-error — supabase update type inference
         .update({
           current_step: 7,
           pipeline_status: pipelineStatus as unknown as Json,

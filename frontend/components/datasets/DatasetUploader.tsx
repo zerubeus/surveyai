@@ -84,6 +84,7 @@ export function DatasetUploader({ projectId, onUploadComplete }: DatasetUploader
       // Create dataset record
       const { data: dataset, error: insertError } = await supabase
         .from("datasets")
+        // @ts-expect-error — supabase insert type inference
         .insert({
           project_id: projectId,
           uploaded_by: user.id,

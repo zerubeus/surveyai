@@ -260,6 +260,7 @@ export function Step1Form({ project }: Step1FormProps) {
 
     const { error } = await supabase
       .from("projects")
+      // @ts-expect-error — supabase update type inference
       .update({
         name,
         description: JSON.stringify({ text: objectiveText, tags: objectiveTags }),

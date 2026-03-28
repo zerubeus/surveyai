@@ -278,6 +278,7 @@ export function Step3ColumnRoles({
       const now = new Date().toISOString();
       const { error } = await supabase
         .from("column_mappings")
+        // @ts-expect-error — supabase update type inference
         .update({ confirmed_by: user.id, confirmed_at: now })
         .in("id", [...selected]);
 
@@ -344,6 +345,7 @@ export function Step3ColumnRoles({
 
       await supabase
         .from("projects")
+        // @ts-expect-error — supabase update type inference
         .update({
           current_step: 4,
           pipeline_status: pipelineStatus as unknown as Json,

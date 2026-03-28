@@ -149,6 +149,15 @@ export function Step5Analysis({
   const [showAutoApproveConfirm, setShowAutoApproveConfirm] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [updatingPlanIds, setUpdatingPlanIds] = useState<Set<string>>(new Set());
+  const [showCustomTestForm, setShowCustomTestForm] = useState(false);
+  const [customTestForm, setCustomTestForm] = useState({
+    rqText: "",
+    depVar: "",
+    indepVar: "",
+    testType: "linear_regression" as string,
+    controlVars: "",
+  });
+  const [isAddingCustom, setIsAddingCustom] = useState(false);
 
   /* ---------- Derived state ---------- */
   const isGenerating =
@@ -266,6 +275,7 @@ export function Step5Analysis({
       for (const plan of pendingPlans) {
         await supabase
           .from("analysis_plans")
+          // @ts-expect-error — supabase update type inference
           .update({
             status: "approved" as const,
             approved_by: user?.id ?? null,
@@ -299,6 +309,7 @@ export function Step5Analysis({
 
       await supabase
         .from("projects")
+        // @ts-expect-error — supabase update type inference
         .update({
           current_step: 6,
           pipeline_status: pipelineStatus as unknown as Json,
@@ -328,6 +339,49 @@ export function Step5Analysis({
       return next;
     });
   }, []);
+
+  /** Add a custom analysis plan directly */
+  const handleAddCustomTest = useCallback(async () => {
+    if (!datasetId || !customTestForm.depVar || !customTestForm.indepVar) return;
+    setIsAddingCustom(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const controlVars = customTestForm.controlVars
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+
+      const { error } = await supabase
+        .from("analysis_plans")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .insert({
+          project_id: projectId,
+          dataset_id: datasetId,
+          created_by: user?.id ?? null,
+          research_question_id: "custom",
+          research_question_text: customTestForm.rqText || `${customTestForm.testType}: ${customTestForm.depVar} ← ${customTestForm.indepVar}`,
+          dependent_variable: customTestForm.depVar,
+          independent_variable: customTestForm.indepVar,
+          control_variables: controlVars,
+          selected_test: customTestForm.testType,
+          status: "approved",
+          approved_by: user?.id ?? null,
+          approved_at: new Date().toISOString(),
+        } as never);
+
+      if (!error) {
+        setShowCustomTestForm(false);
+        setCustomTestForm({ rqText: "", depVar: "", indepVar: "", testType: "linear_regression", controlVars: "" });
+        toast("Custom test added and approved", { variant: "success" });
+      } else {
+        toast(`Failed to add test: ${error.message}`, { variant: "error" });
+      }
+    } finally {
+      setIsAddingCustom(false);
+    }
+  }, [datasetId, projectId, customTestForm, supabase]);
 
   /* ================================================================ */
   /*  No dataset guard                                                 */
@@ -593,6 +647,108 @@ export function Step5Analysis({
           />
         ))}
       </div>
+
+      {/* Add Custom Test */}
+      {!allCompleted && (
+        <div className="pt-2">
+          {!showCustomTestForm ? (
+            <button
+              type="button"
+              onClick={() => setShowCustomTestForm(true)}
+              className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 underline-offset-2 hover:underline"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Add custom analysis (e.g. linear regression)
+            </button>
+          ) : (
+            <Card className="border-purple-200 bg-purple-50/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Sparkles className="h-4 w-4 text-purple-600" />
+                  Add Custom Statistical Test
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Test Type</label>
+                    <select
+                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                      value={customTestForm.testType}
+                      onChange={(e) => setCustomTestForm(f => ({...f, testType: e.target.value}))}
+                    >
+                      <option value="linear_regression">Linear Regression (OLS)</option>
+                      <option value="logistic_regression">Logistic Regression</option>
+                      <option value="moderation_analysis">Moderation Analysis</option>
+                      <option value="mediation_analysis">Mediation Analysis</option>
+                      <option value="pearson">Pearson Correlation</option>
+                      <option value="spearman">Spearman Correlation</option>
+                      <option value="kendall_tau">Kendall Tau</option>
+                      <option value="point_biserial">Point-Biserial Correlation</option>
+                      <option value="t_test">Independent t-test</option>
+                      <option value="welchs_t">Welch t-test</option>
+                      <option value="anova">One-Way ANOVA</option>
+                      <option value="mann_whitney">Mann-Whitney U</option>
+                      <option value="kruskal_wallis">Kruskal-Wallis</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Outcome Variable</label>
+                    <input
+                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                      placeholder="e.g. JobSatisfaction"
+                      value={customTestForm.depVar}
+                      onChange={(e) => setCustomTestForm(f => ({...f, depVar: e.target.value}))}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Predictor Variable</label>
+                    <input
+                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                      placeholder="e.g. WLB"
+                      value={customTestForm.indepVar}
+                      onChange={(e) => setCustomTestForm(f => ({...f, indepVar: e.target.value}))}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Control Variables <span className="font-normal">(comma-separated, optional)</span>
+                    </label>
+                    <input
+                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                      placeholder="e.g. Workload, Stress"
+                      value={customTestForm.controlVars}
+                      onChange={(e) => setCustomTestForm(f => ({...f, controlVars: e.target.value}))}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Research Question (optional)</label>
+                  <input
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                    placeholder="e.g. Does WLB predict job satisfaction controlling for workload?"
+                    value={customTestForm.rqText}
+                    onChange={(e) => setCustomTestForm(f => ({...f, rqText: e.target.value}))}
+                  />
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <Button
+                    size="sm"
+                    onClick={handleAddCustomTest}
+                    disabled={isAddingCustom || !customTestForm.depVar || !customTestForm.indepVar}
+                  >
+                    {isAddingCustom ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
+                    Add & Approve Test
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setShowCustomTestForm(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
     </div>
   );
 }

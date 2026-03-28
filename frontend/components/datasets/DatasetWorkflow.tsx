@@ -41,6 +41,7 @@ export function DatasetWorkflow({ initialDataset, projectId, instrumentId, hasCo
     if (!dataset) return;
     setIsResetting(true);
     const supabase = createBrowserClient();
+    // @ts-expect-error — supabase update type inference
     await supabase.from("datasets").update({ is_current: false }).eq("id", dataset.id);
     setDataset(null);
     setIsResetting(false);

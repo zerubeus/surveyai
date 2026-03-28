@@ -121,6 +121,7 @@ export function DataPreview({ datasetId, storagePath, fileType }: DataPreviewPro
     const supabase = createBrowserClient();
     supabase
       .from("datasets")
+      // @ts-expect-error — supabase update type inference
       .update({
         row_count: data.totalRows,
         column_count: data.totalColumns,

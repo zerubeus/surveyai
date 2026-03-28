@@ -108,6 +108,7 @@ export function useColumnMappings(datasetId: string | null) {
 
       const { error } = await supabase
         .from("column_mappings")
+        // @ts-expect-error — supabase update type inference
         .update({
           role: newRole,
           detection_method: "manual",
@@ -152,6 +153,7 @@ export function useColumnMappings(datasetId: string | null) {
     // Confirm all unconfirmed mappings
     const { error } = await supabase
       .from("column_mappings")
+      // @ts-expect-error — supabase update type inference
       .update({
         confirmed_by: user.id,
         confirmed_at: now,

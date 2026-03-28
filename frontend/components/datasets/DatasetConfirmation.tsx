@@ -29,6 +29,7 @@ export function DatasetConfirmation({
 
     const { data: updated, error } = await supabase
       .from("datasets")
+      // @ts-expect-error — supabase update type inference
       .update({
         status: "confirmed",
         confirmed_at: new Date().toISOString(),

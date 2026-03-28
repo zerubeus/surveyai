@@ -116,6 +116,7 @@ export function AnalysisPlanReview({
     for (const plan of plannedPlans) {
       await supabase
         .from("analysis_plans")
+        // @ts-expect-error — supabase update type inference
         .update({
           status: "approved",
           approved_by: user?.id ?? null,

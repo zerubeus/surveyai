@@ -159,6 +159,7 @@ export function InstrumentUploader({ projectId }: InstrumentUploaderProps) {
         const fileType = ACCEPTED_TYPES[mimeType] ?? "unknown";
         const { data: instrument, error: insertError } = await supabase
           .from("instruments")
+          // @ts-expect-error — supabase insert type inference
           .insert({
             project_id: projectId,
             uploaded_by: user.id,

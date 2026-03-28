@@ -371,10 +371,12 @@ export function Step7Report({
       await Promise.all([
         supabase
           .from("report_sections")
+          // @ts-expect-error — supabase update type inference
           .update({ sort_order: swap.sort_order })
           .eq("id", current.id),
         supabase
           .from("report_sections")
+          // @ts-expect-error — supabase update type inference
           .update({ sort_order: current.sort_order })
           .eq("id", swap.id),
       ]);

@@ -35,6 +35,7 @@ export function ReportEditor({ sections, chartUrls }: ReportEditorProps) {
         const supabase = createBrowserClient();
         await supabase
           .from("report_sections")
+          // @ts-expect-error — supabase update type inference
           .update({ content })
           .eq("id", sectionId);
       } finally {

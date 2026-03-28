@@ -111,6 +111,7 @@ export function CleaningSuggestionFlow({
         // Mark as approved
         await supabase
           .from("cleaning_operations")
+          // @ts-expect-error — supabase update type inference
           .update({
             status: "approved" as const,
             approved_by: user.id,
@@ -156,6 +157,7 @@ export function CleaningSuggestionFlow({
 
       await supabase
         .from("cleaning_operations")
+        // @ts-expect-error — supabase update type inference
         .update({
           status: "rejected" as const,
           rejected_by: user.id,
@@ -195,6 +197,7 @@ export function CleaningSuggestionFlow({
       for (const op of operations) {
         await supabase
           .from("cleaning_operations")
+          // @ts-expect-error — supabase update type inference
           .update({
             status: "rejected" as const,
             rejected_by: user.id,

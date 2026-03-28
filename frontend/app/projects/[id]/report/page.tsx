@@ -229,6 +229,7 @@ export default function ReportPage() {
     } else {
       await supabase
         .from("reports")
+        // @ts-expect-error — supabase update type inference
         .update({
           template: selectedTemplate as string,
           status: "generating",

@@ -37,6 +37,7 @@ export function UndoPanel({ appliedOperations, onRefetch }: UndoPanelProps) {
         // Mark operation as undone
         await supabase
           .from("cleaning_operations")
+          // @ts-expect-error — supabase update type inference
           .update({
             status: "undone" as const,
             undone_at: new Date().toISOString(),
@@ -58,12 +59,14 @@ export function UndoPanel({ appliedOperations, onRefetch }: UndoPanelProps) {
             // Set resulting dataset as not current
             await supabase
               .from("datasets")
+              // @ts-expect-error — supabase update type inference
               .update({ is_current: false })
               .eq("id", operation.resulting_dataset_id);
 
             // Set parent as current
             await supabase
               .from("datasets")
+              // @ts-expect-error — supabase update type inference
               .update({ is_current: true })
               .eq("id", resultingDataset.parent_id);
           }

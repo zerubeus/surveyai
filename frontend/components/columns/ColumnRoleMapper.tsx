@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Select } from "@/components/ui/select";
+// Native <select> used below
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TaskProgressBar } from "@/components/tasks/TaskProgressBar";
 import { useColumnMappings } from "@/hooks/useColumnMappings";
@@ -291,7 +291,7 @@ function ColumnRow({
         {mapping.ai_reasoning ?? "—"}
       </td>
       <td className="px-4 py-3">
-        <Select
+        <select
           value={mapping.role ?? "ignore"}
           onChange={(e) => onRoleChange(mapping.id, e.target.value)}
           className="h-8 w-[140px] text-xs"
@@ -301,7 +301,7 @@ function ColumnRow({
               {role.label}
             </option>
           ))}
-        </Select>
+        </select>
       </td>
       <td className="px-4 py-3">
         <ConfidenceBadge confidence={confidence} />
