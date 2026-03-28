@@ -68,6 +68,10 @@ def main() -> None:
             task_id = task["task_id"]
             task_type = task["task_type"]
             payload = task["payload"]
+            # Inject created_by into payload so services can use the actual user UUID
+            # claim_next_task() returns created_by from the tasks table
+            if "created_by" not in payload and task.get("created_by"):
+                payload = {**payload, "created_by": str(task["created_by"])}
 
             logger.info(
                 "task_claimed",
