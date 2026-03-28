@@ -17,6 +17,7 @@ interface DatasetWorkflowProps {
 
 export function DatasetWorkflow({ initialDataset, projectId, instrumentId }: DatasetWorkflowProps) {
   const [dataset, setDataset] = useState<Tables<"datasets"> | null>(initialDataset);
+  const [rolesConfirmed, setRolesConfirmed] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
 
   const handleUploadComplete = useCallback((uploaded: Tables<"datasets">) => {
@@ -96,7 +97,16 @@ export function DatasetWorkflow({ initialDataset, projectId, instrumentId }: Dat
         datasetId={dataset.id}
         projectId={projectId}
         instrumentId={instrumentId}
+        onComplete={() => setRolesConfirmed(true)}
       />
+      {rolesConfirmed && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-6 dark:border-blue-900 dark:bg-blue-950">
+          <p className="font-medium text-blue-900 dark:text-blue-100">✅ Column roles confirmed</p>
+          <p className="mt-1 text-sm text-blue-700 dark:text-blue-300">
+            Next: EDA & Bias Detection — coming in Sprint 7 completion.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

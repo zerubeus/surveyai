@@ -54,11 +54,12 @@ export default async function ProjectDetailPage({
 
   const currentDataset = datasets?.[0] ?? null;
 
-  // Fetch the most recent instrument for this project
+  // Fetch the most recently PARSED instrument (prefer parsed over pending)
   const { data: instruments } = await supabase
     .from("instruments")
     .select("*")
     .eq("project_id", project.id)
+    .eq("parse_status", "parsed")
     .order("created_at", { ascending: false })
     .limit(1);
 

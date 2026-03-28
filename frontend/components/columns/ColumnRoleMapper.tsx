@@ -30,12 +30,14 @@ interface ColumnRoleMapperProps {
   datasetId: string;
   projectId: string;
   instrumentId: string | null;
+  onComplete?: () => void;
 }
 
 export function ColumnRoleMapper({
   datasetId,
   projectId,
   instrumentId,
+  onComplete,
 }: ColumnRoleMapperProps) {
   const { mappings, isLoading, updateRole, confirmAll } =
     useColumnMappings(datasetId);
@@ -84,10 +86,11 @@ export function ColumnRoleMapper({
     setIsConfirming(true);
     try {
       await confirmAll();
+      onComplete?.();
     } finally {
       setIsConfirming(false);
     }
-  }, [confirmAll]);
+  }, [confirmAll, onComplete]);
 
   const handleRoleChange = useCallback(
     (mappingId: string, newRole: string) => {
