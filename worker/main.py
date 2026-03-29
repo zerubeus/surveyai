@@ -144,6 +144,10 @@ def main() -> None:
             # claim_next_task() returns created_by from the tasks table
             if "created_by" not in payload and task.get("created_by"):
                 payload = {**payload, "created_by": str(task["created_by"])}
+            # Inject project_id from the tasks table row if not already in payload
+            # This makes all handlers resilient to missing project_id in payload
+            if "project_id" not in payload and task.get("project_id"):
+                payload = {**payload, "project_id": str(task["project_id"])}
 
             logger.info(
                 "task_claimed",
