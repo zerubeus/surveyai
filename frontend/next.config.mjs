@@ -24,8 +24,10 @@ const nextConfig = {
     ],
   },
 
-  // Enable typed routes
-  typedRoutes: true,
+  // Experimental features
+  experimental: {
+    typedRoutes: true,
+  },
 };
 
 export default nextConfig;
