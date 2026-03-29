@@ -164,7 +164,7 @@ export function Step3ColumnRoles({
 
     hasDispatched.current = true;
 
-    dispatchTask(project.id, "detect_column_roles", {}, dataset.id)
+    dispatchTask(project.id, "detect_column_roles", { project_id: project.id }, dataset.id)
       .then(({ taskId }) => setDetectTaskId(taskId))
       .catch((err) => {
         console.error("Failed to dispatch detect_column_roles:", err);
@@ -305,7 +305,7 @@ export function Step3ColumnRoles({
       const { taskId } = await dispatchTask(
         project.id,
         "detect_column_roles",
-        { columns: columnNames },
+        { columns: columnNames, project_id: project.id },
         dataset.id,
       );
       setDetectTaskId(taskId);
@@ -432,7 +432,7 @@ export function Step3ColumnRoles({
             onClick={() => {
               hasDispatched.current = false;
               setDetectTaskId(null);
-              dispatchTask(project.id, "detect_column_roles", {}, dataset.id)
+              dispatchTask(project.id, "detect_column_roles", { project_id: project.id }, dataset.id)
                 .then(({ taskId }) => setDetectTaskId(taskId))
                 .catch(() =>
                   toast("Failed to retry detection", { variant: "error" }),

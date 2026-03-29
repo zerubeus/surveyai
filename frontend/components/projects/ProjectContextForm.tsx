@@ -149,6 +149,16 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
           report_audience: result.data.report_audience,
           instrument_language: result.data.instrument_language,
         }),
+        current_step: 2,
+        pipeline_status: {
+          "1": "completed",
+          "2": "active",
+          "3": "locked",
+          "4": "locked",
+          "5": "locked",
+          "6": "locked",
+          "7": "locked",
+        },
       })
       .select("id")
       .single();
@@ -160,7 +170,7 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
       return;
     }
 
-    router.push(`/projects/${data?.id}`);
+    router.push(`/projects/${data?.id}/step/2`);
     router.refresh();
   }
 
