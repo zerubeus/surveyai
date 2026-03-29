@@ -36,9 +36,11 @@ function GoogleIcon() {
 
 export function GoogleButton({ label = "Continue with Google", className }: GoogleButtonProps) {
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   async function handleGoogleSignIn() {
     setLoading(true);
+    setErrorMsg(null);
     const supabase = createBrowserClient();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -52,25 +54,31 @@ export function GoogleButton({ label = "Continue with Google", className }: Goog
     });
     if (error) {
       console.error("Google OAuth error:", error.message);
+      setErrorMsg(error.message);
       setLoading(false);
     }
     // On success, Supabase redirects the browser — no need to handle
   }
 
   return (
-    <Button
-      type="button"
-      variant="outline"
-      className={`w-full gap-2 ${className ?? ""}`}
-      onClick={handleGoogleSignIn}
-      disabled={loading}
-    >
-      {loading ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
-      ) : (
-        <GoogleIcon />
+    <div className="w-full">
+      <Button
+        type="button"
+        variant="outline"
+        className={`w-full gap-2 ${className ?? ""}`}
+        onClick={handleGoogleSignIn}
+        disabled={loading}
+      >
+        {loading ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <GoogleIcon />
+        )}
+        {loading ? "Redirecting…" : label}
+      </Button>
+      {errorMsg && (
+        <p className="mt-2 text-sm text-red-500 text-center">{errorMsg}</p>
       )}
-      {loading ? "Redirecting…" : label}
-    </Button>
+    </div>
   );
 }
