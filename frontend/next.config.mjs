@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Required for OpenNext / Cloudflare Workers deployment
+  output: "standalone",
+
   // Strict mode for catching bugs early
   reactStrictMode: true,
 
