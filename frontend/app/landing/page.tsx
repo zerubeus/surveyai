@@ -1,7 +1,4 @@
-"use client";
-
 import Link from "next/link";
-import { useState } from "react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import {
   BarChart3,
@@ -109,8 +106,6 @@ const TESTIMONIALS = [
 ];
 
 export default function LandingPage() {
-  const [menuOpen, setMenuOpen] = useState(false);
-
   return (
     <div className="min-h-screen bg-white text-gray-900">
       {/* Nav */}
