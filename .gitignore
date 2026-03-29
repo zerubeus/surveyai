@@ -38,5 +38,10 @@ Thumbs.db
 dist/
 build/
 
+# Cloudflare / OpenNext
+frontend/.open-next/
+frontend/.wrangler/
+frontend/.dev.vars
+
 # Extracted docs (temp files)
 .extracted_*
