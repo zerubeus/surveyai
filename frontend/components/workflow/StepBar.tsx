@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   Check,
   Lock,
@@ -40,6 +41,11 @@ interface StepBarProps {
 }
 
 export function StepBar({ projectId, currentStep, pipelineStatus, activeTasksByStep }: StepBarProps) {
+  const pathname = usePathname();
+  // Derive the active step from the URL (e.g. /projects/[id]/step/3 → 3)
+  const urlStepMatch = pathname?.match(/\/step\/(\d+)/);
+  const activeStep = urlStepMatch ? parseInt(urlStepMatch[1], 10) : currentStep;
+
   return (
     <nav className="w-full overflow-x-auto">
       <ol className="flex items-center gap-0">
@@ -47,7 +53,7 @@ export function StepBar({ projectId, currentStep, pipelineStatus, activeTasksByS
           const status: StepStatus =
             (pipelineStatus[String(step.num)] as StepStatus) ?? "locked";
           const isClickable = status === "completed" || status === "active" || status === "needs-refresh";
-          const isCurrent = step.num === currentStep;
+          const isCurrent = step.num === activeStep;
 
           const stepContent = (
             <li
@@ -65,14 +71,22 @@ export function StepBar({ projectId, currentStep, pipelineStatus, activeTasksByS
                   <div
                     className={cn(
                       "flex h-9 w-9 items-center justify-center rounded-full border-2 text-sm font-medium transition-colors",
-                      status === "completed" &&
+                      status === "completed" && !isCurrent &&
                         "border-green-500 bg-green-500 text-white",
-                      status === "active" &&
+                      status === "completed" && isCurrent &&
+                        "border-blue-600 bg-blue-600 text-white ring-2 ring-blue-300 ring-offset-1",
+                      status === "active" && !isCurrent &&
                         "border-blue-500 bg-blue-500 text-white",
-                      status === "locked" &&
+                      status === "active" && isCurrent &&
+                        "border-blue-600 bg-blue-600 text-white ring-2 ring-blue-300 ring-offset-1",
+                      status === "locked" && !isCurrent &&
                         "border-muted-foreground/30 bg-muted text-muted-foreground",
-                      status === "needs-refresh" &&
-                        "border-yellow-500 bg-yellow-50 text-yellow-700"
+                      status === "locked" && isCurrent &&
+                        "border-blue-500 bg-blue-500 text-white",
+                      status === "needs-refresh" && !isCurrent &&
+                        "border-yellow-500 bg-yellow-50 text-yellow-700",
+                      status === "needs-refresh" && isCurrent &&
+                        "border-blue-600 bg-blue-600 text-white ring-2 ring-blue-300 ring-offset-1"
                     )}
                   >
                     {status === "completed" ? (
@@ -106,10 +120,11 @@ export function StepBar({ projectId, currentStep, pipelineStatus, activeTasksByS
                 <span
                   className={cn(
                     "hidden text-xs sm:block",
-                    status === "completed" && "text-green-600 font-medium",
-                    status === "active" && "text-blue-600 font-medium",
-                    status === "locked" && "text-muted-foreground",
-                    status === "needs-refresh" && "text-yellow-600 font-medium"
+                    isCurrent && "text-blue-600 font-semibold",
+                    !isCurrent && status === "completed" && "text-green-600 font-medium",
+                    !isCurrent && status === "active" && "text-blue-600 font-medium",
+                    !isCurrent && status === "locked" && "text-muted-foreground",
+                    !isCurrent && status === "needs-refresh" && "text-yellow-600 font-medium"
                   )}
                 >
                   {step.name}
