@@ -356,6 +356,7 @@ export function Step3ColumnRoles({
         variant: "success",
       });
 
+      router.refresh();
       router.push(`/projects/${project.id}/step/4`);
     } catch (err) {
       console.error("Confirm all failed:", err);

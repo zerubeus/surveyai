@@ -755,6 +755,7 @@ export function Step2Upload({
       })
       .eq("id", project.id);
 
+    router.refresh();
     router.push(`/projects/${project.id}/step/3`);
   }
 

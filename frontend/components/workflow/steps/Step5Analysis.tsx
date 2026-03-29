@@ -306,15 +306,15 @@ export function Step5Analysis({
       // Update pipeline status
       const pipelineStatus: PipelineStatus = {
         ...((project.pipeline_status as PipelineStatus) ?? {}),
-        "5": "completed",
-        "6": "active",
+        "6": "completed",
+        "7": "active",
       };
 
       await supabase
         .from("projects")
         // @ts-expect-error — supabase update type inference
         .update({
-          current_step: 6,
+          current_step: 7,
           pipeline_status: pipelineStatus as unknown as Json,
         })
         .eq("id", projectId);
@@ -323,7 +323,8 @@ export function Step5Analysis({
         variant: "success",
       });
 
-      router.push(`/projects/${projectId}/step/6`);
+      router.refresh();
+      router.push(`/projects/${projectId}/step/7`);
     } catch {
       toast("Failed to start analysis", { variant: "error" });
     } finally {
@@ -536,7 +537,7 @@ export function Step5Analysis({
               </div>
             </div>
             <Button
-              onClick={() => router.push(`/projects/${projectId}/step/6`)}
+              onClick={() => { router.refresh(); router.push(`/projects/${projectId}/step/7`); }}
               className="bg-green-600 hover:bg-green-700"
             >
               View Results

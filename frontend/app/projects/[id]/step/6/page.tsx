@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
-import { Step6Results } from "@/components/workflow/steps/Step6Results";
+import { Step5Analysis } from "@/components/workflow/steps/Step5Analysis";
 import type { Tables } from "@/lib/types/database";
 
 export default async function Step6Page({
@@ -30,23 +30,46 @@ export default async function Step6Page({
     .maybeSingle();
   const dataset = datasetRaw as Tables<"datasets"> | null;
 
-  // Check for running run_analysis task
-  const { data: runningTaskRaw } = await supabase
+  let hasWeightColumn = false;
+  let weightColumnName: string | null = null;
+
+  if (dataset) {
+    const { data: weightMappingRaw } = await supabase
+      .from("column_mappings")
+      .select("column_name")
+      .eq("dataset_id", dataset.id)
+      .eq("role", "weight")
+      .not("confirmed_by", "is", null)
+      .maybeSingle();
+    const weightMapping = weightMappingRaw as { column_name: string } | null;
+    if (weightMapping) {
+      hasWeightColumn = true;
+      weightColumnName = weightMapping.column_name;
+    }
+  }
+
+  const { data: runningTasksRaw } = await supabase
     .from("tasks")
     .select("id, task_type, status")
     .eq("project_id", id)
-    .eq("task_type", "run_analysis")
+    .in("task_type", ["generate_analysis_plan", "run_analysis"])
     .in("status", ["pending", "claimed", "running"])
     .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const runningTask = runningTaskRaw as { id: string } | null;
+    .limit(2);
+  const runningTasks = runningTasksRaw as { id: string; task_type: string; status: string }[] | null;
+
+  const initialTaskIds: Record<string, string> = {};
+  for (const task of runningTasks ?? []) {
+    initialTaskIds[task.task_type] = task.id;
+  }
 
   return (
-    <Step6Results
+    <Step5Analysis
       project={project as Tables<"projects">}
       dataset={dataset}
-      initialRunningTaskId={runningTask?.id ?? null}
+      hasWeightColumn={hasWeightColumn}
+      weightColumnName={weightColumnName}
+      initialRunningTaskIds={initialTaskIds}
     />
   );
 }

@@ -284,6 +284,7 @@ export function Step1Form({ project }: Step1FormProps) {
       return;
     }
 
+    router.refresh();
     router.push(`/projects/${project.id}/step/2`);
   };
 

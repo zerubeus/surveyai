@@ -394,50 +394,23 @@ export function Step4Quality({
         </Card>
       )}
 
-      <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="overview">Quality Overview</TabsTrigger>
-          <TabsTrigger
-            value="cleaning"
-            disabled={!hasVisitedTab1}
-          >
-            {!hasVisitedTab1 && <Lock className="mr-1.5 h-3.5 w-3.5" />}
-            Cleaning Suggestions
-          </TabsTrigger>
-        </TabsList>
-
-        {/* ============================================================ */}
-        {/*  TAB 1: Quality Overview                                      */}
-        {/* ============================================================ */}
-        <TabsContent value="overview">
-          <QualityOverviewTab
-            overallQuality={overallQuality}
-            columnsProfiled={columnsProfiled}
-            totalIssues={totalIssues}
-            summary={summary}
-            columnProfiles={columnProfiles}
-            biasFlags={biasFlags}
-            consistencyChecks={consistencyChecks}
-            interpretData={interpretData}
-            mappingsByColumn={mappingsByColumn}
-            hasResults={hasResults}
-            resultsLoading={resultsLoading}
-            onGoToCleaning={() => handleTabChange("cleaning")}
-          />
-        </TabsContent>
-
-        {/* ============================================================ */}
-        {/*  TAB 2: Cleaning Suggestions                                  */}
-        {/* ============================================================ */}
-        <TabsContent value="cleaning">
-          <CleaningSuggestionsTab
-            projectId={project.id}
-            datasetId={dataset.id}
-            cleaning={cleaning}
-            project={project}
-          />
-        </TabsContent>
-      </Tabs>
+      <QualityOverviewTab
+        overallQuality={overallQuality}
+        columnsProfiled={columnsProfiled}
+        totalIssues={totalIssues}
+        summary={summary}
+        columnProfiles={columnProfiles}
+        biasFlags={biasFlags}
+        consistencyChecks={consistencyChecks}
+        interpretData={interpretData}
+        mappingsByColumn={mappingsByColumn}
+        hasResults={hasResults}
+        resultsLoading={resultsLoading}
+        onGoToCleaning={() => {
+          router.refresh();
+          router.push(`/projects/${project.id}/step/5`);
+        }}
+      />
     </div>
   );
 }
@@ -1049,10 +1022,11 @@ function CleaningSuggestionsTab({
         })
         .eq("id", projectId);
 
-      toast("Data cleaning finalized! Moving to Step 5.", {
+      toast("Quality review done! Moving to Cleaning.", {
         variant: "success",
       });
 
+      router.refresh();
       router.push(`/projects/${projectId}/step/5`);
     } catch {
       toast("Failed to finalize", { variant: "error" });

@@ -89,7 +89,9 @@ export function StepBar({ projectId, currentStep, pipelineStatus, activeTasksByS
                         "border-blue-600 bg-blue-600 text-white ring-2 ring-blue-300 ring-offset-1"
                     )}
                   >
-                    {status === "completed" ? (
+                    {isCurrent ? (
+                      step.num
+                    ) : status === "completed" ? (
                       <Check className="h-4 w-4" />
                     ) : status === "locked" ? (
                       <Lock className="h-3.5 w-3.5" />

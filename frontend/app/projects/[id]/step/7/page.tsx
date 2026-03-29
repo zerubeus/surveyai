@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
-import { Step7Report } from "@/components/workflow/steps/Step7Report";
+import { Step6Results } from "@/components/workflow/steps/Step6Results";
 import type { Tables } from "@/lib/types/database";
 
 export default async function Step7Page({
@@ -22,26 +22,30 @@ export default async function Step7Page({
     .single();
   if (!project) notFound();
 
-  // Check for running generate_report or export_report tasks
-  const { data: runningTasksRaw } = await supabase
+  const { data: datasetRaw } = await supabase
+    .from("datasets")
+    .select("*")
+    .eq("project_id", id)
+    .eq("is_current", true)
+    .maybeSingle();
+  const dataset = datasetRaw as Tables<"datasets"> | null;
+
+  const { data: runningTaskRaw } = await supabase
     .from("tasks")
     .select("id, task_type, status")
     .eq("project_id", id)
-    .in("task_type", ["generate_report", "export_report"])
+    .eq("task_type", "run_analysis")
     .in("status", ["pending", "claimed", "running"])
     .order("created_at", { ascending: false })
-    .limit(2);
-  const runningTasks = runningTasksRaw as { id: string; task_type: string; status: string }[] | null;
-
-  const initialTaskIds: Record<string, string> = {};
-  for (const task of runningTasks ?? []) {
-    initialTaskIds[task.task_type] = task.id;
-  }
+    .limit(1)
+    .maybeSingle();
+  const runningTask = runningTaskRaw as { id: string } | null;
 
   return (
-    <Step7Report
+    <Step6Results
       project={project as Tables<"projects">}
-      initialRunningTaskIds={initialTaskIds}
+      dataset={dataset}
+      initialRunningTaskId={runningTask?.id ?? null}
     />
   );
 }

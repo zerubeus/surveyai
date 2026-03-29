@@ -334,8 +334,7 @@ export function Step6Results({
     try {
       const pipelineStatus: PipelineStatus = {
         ...((project.pipeline_status as PipelineStatus) ?? {}),
-        "6": "completed",
-        "7": "active",
+        "7": "completed",
       };
 
       await supabase
@@ -347,7 +346,7 @@ export function Step6Results({
         })
         .eq("id", projectId);
 
-      router.push(`/projects/${projectId}/step/7`);
+      router.refresh();
     } catch {
       toast("Failed to proceed", { variant: "error" });
     } finally {
@@ -424,7 +423,7 @@ export function Step6Results({
           <Button
             variant="outline"
             className="mt-4"
-            onClick={() => router.push(`/projects/${projectId}/step/5`)}
+            onClick={() => router.push(`/projects/${projectId}/step/6`)}
           >
             Return to Step 5
           </Button>
@@ -457,7 +456,7 @@ export function Step6Results({
           <Button
             variant="outline"
             className="mt-4"
-            onClick={() => router.push(`/projects/${projectId}/step/5`)}
+            onClick={() => router.push(`/projects/${projectId}/step/6`)}
           >
             Go to Step 5
           </Button>
