@@ -110,11 +110,25 @@ def apply_cleaning_operation(
     col_name: str | None = operation.get("column_name")
     params: dict[str, Any] = operation.get("parameters") or {}
 
+    # Capture original values for changed row tracking
+    df_before = df.copy()
+
     df = _apply_transform(df, op_type, col_name, params)
+
+    # Find changed row indices (for column-level operations)
+    changed_indices: list[int] = []
+    if col_name and col_name in df_before.columns and col_name in df.columns:
+        # Compare string representations to catch all changes
+        before_vals = df_before[col_name].astype(str).fillna("__NULL__")
+        after_vals = df[col_name].astype(str).fillna("__NULL__")
+        changed_mask = before_vals != after_vals
+        changed_indices = changed_mask[changed_mask].index.tolist()[:500]  # cap at 500
 
     after_stats: dict[str, Any] = {
         "row_count": len(df),
         "null_count": int(df.isnull().sum().sum()),
+        "changed_row_indices": changed_indices,
+        "changed_column": col_name,
     }
 
     # Step 5: Upload new file

@@ -9,6 +9,7 @@ import { useDispatchTask } from "@/hooks/useDispatchTask";
 import { useTaskProgress } from "@/hooks/useTaskProgress";
 import { useProgressToast } from "@/hooks/useProgressToast";
 import { LoadingSkeleton } from "@/components/workflow/LoadingSkeleton";
+import { ChangesSheet } from "@/components/workflow/ChangesSheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -36,6 +37,7 @@ import {
   BarChart3,
   CheckCircle2,
   ChevronDown,
+  Eye,
   Loader2,
   Undo2,
 } from "lucide-react";
@@ -533,13 +535,62 @@ export function Step4Quality({
     cleaning.all.length === 0;
 
   /* ---------- Dismissed + applying state ---------- */
-  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  // Parse quality_dismissed_ids from project.additional_context on mount
+  const initialDismissedIds = useMemo(() => {
+    try {
+      const ctx = project.additional_context
+        ? JSON.parse(project.additional_context)
+        : {};
+      const ids = ctx.quality_dismissed_ids;
+      return Array.isArray(ids) ? new Set<string>(ids) : new Set<string>();
+    } catch {
+      return new Set<string>();
+    }
+  }, [project.additional_context]);
+
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(initialDismissedIds);
   const [applyingIssueId, setApplyingIssueId] = useState<string | null>(null);
   const [fixApplyTaskId, setFixApplyTaskId] = useState<string | null>(null);
   // Custom action text per issue
   const [customTexts, setCustomTexts] = useState<Record<string, string>>({});
   const [showCustomInput, setShowCustomInput] = useState<Record<string, boolean>>({});
   const fixApplyProgress = useTaskProgress(fixApplyTaskId);
+
+  // Track applied operation IDs for visual state
+  const appliedOpIds = useMemo(() => {
+    return new Set(cleaning.applied.map((op) => op.id));
+  }, [cleaning.applied]);
+
+  // Debounce-save dismissedIds to project.additional_context
+  const dismissedIdsRef = useRef(dismissedIds);
+  dismissedIdsRef.current = dismissedIds;
+
+  useEffect(() => {
+    // Skip if dismissedIds hasn't changed from initial
+    if (dismissedIds.size === initialDismissedIds.size &&
+        [...dismissedIds].every((id) => initialDismissedIds.has(id))) {
+      return;
+    }
+    const t = setTimeout(async () => {
+      try {
+        const currentCtx = project.additional_context
+          ? JSON.parse(project.additional_context)
+          : {};
+        const newCtx = {
+          ...currentCtx,
+          quality_dismissed_ids: [...dismissedIdsRef.current],
+        };
+        await supabase
+          .from("projects")
+          // @ts-ignore — supabase update type inference
+          .update({ additional_context: JSON.stringify(newCtx) })
+          .eq("id", project.id);
+      } catch (e) {
+        console.error("Failed to persist dismissed IDs:", e);
+      }
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [dismissedIds, initialDismissedIds, project.additional_context, project.id, supabase]);
 
   useEffect(() => {
     if (
@@ -555,6 +606,9 @@ export function Step4Quality({
       setFixApplyTaskId(null);
     }
   }, [fixApplyProgress.status]);
+
+  /* ---------- Changes sheet state ---------- */
+  const [isChangesSheetOpen, setIsChangesSheetOpen] = useState(false);
 
   /* ---------- Build 7 audit sections ---------- */
   const rowCount = dataset?.row_count ?? 0;
@@ -975,6 +1029,8 @@ export function Step4Quality({
                       ? cleaning.all.find((op) => op.id === issue.matchingOpId)
                       : null;
                     const suggestedFixLabel = matchingOp?.description ?? "Apply suggested fix";
+                    // Check if this issue's fix has been applied
+                    const isApplied = issue.matchingOpId && appliedOpIds.has(issue.matchingOpId);
 
                     // Transform recommendation to first-person expert voice
                     const expertVoice = issue.recommendation
@@ -987,6 +1043,31 @@ export function Step4Quality({
                       .replace(/^Fix /i, "I'll fix ")
                       .replace(/^Cap /i, "I'll cap ")
                       .replace(/^Impute /i, "I'll impute ");
+
+                    // Show applied confirmation card
+                    if (isApplied) {
+                      return (
+                        <div
+                          key={issue.id}
+                          className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 p-4 space-y-2"
+                        >
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                            <span className="text-sm font-medium text-green-800 dark:text-green-200">
+                              Fixed: {issue.title}
+                            </span>
+                            {issue.columnName && (
+                              <code className="rounded bg-green-100 dark:bg-green-900 px-1.5 py-0.5 text-xs font-mono text-green-700 dark:text-green-300">
+                                {issue.columnName}
+                              </code>
+                            )}
+                          </div>
+                          <p className="text-sm text-green-700 dark:text-green-300">
+                            {suggestedFixLabel}
+                          </p>
+                        </div>
+                      );
+                    }
 
                     return (
                       <div
@@ -1163,11 +1244,18 @@ export function Step4Quality({
         );
         const hasUnresolvedFixable = unresolvedFixable.length > 0;
 
-        // Count applied fixes
-        const appliedCount = cleaning.all.filter((op) => op.status === "applied").length;
+        // Count applied fixes and changed cells
+        const appliedOps = cleaning.all.filter((op) => op.status === "applied");
+        const appliedCount = appliedOps.length;
         const notedCount = auditSections.flatMap((s) =>
           s.issues.filter((i) => i.infoOnly && !dismissedIds.has(i.id))
         ).length;
+
+        // Count total changed cells from applied operations
+        const totalChangedCells = appliedOps.reduce((sum, op) => {
+          const snapshot = op.after_snapshot as { changed_row_indices?: number[] } | null;
+          return sum + (snapshot?.changed_row_indices?.length ?? 0);
+        }, 0);
 
         return (
           <div className="space-y-3 border-t pt-4">
@@ -1185,11 +1273,25 @@ export function Step4Quality({
             )}
 
             <div className="flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">
-                {totalIssueCount === 0
-                  ? "No issues found"
-                  : `${totalIssueCount} issue${totalIssueCount !== 1 ? "s" : ""} reviewed`}
-                {hasUnresolvedFixable && ` · ${unresolvedFixable.length} pending`}
+              <div className="flex items-center gap-4">
+                <div className="text-sm text-muted-foreground">
+                  {totalIssueCount === 0
+                    ? "No issues found"
+                    : `${totalIssueCount} issue${totalIssueCount !== 1 ? "s" : ""} reviewed`}
+                  {hasUnresolvedFixable && ` · ${unresolvedFixable.length} pending`}
+                </div>
+                {/* View applied changes button */}
+                {appliedCount > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsChangesSheetOpen(true)}
+                  >
+                    <Eye className="mr-1.5 h-3.5 w-3.5" />
+                    View applied changes
+                    {totalChangedCells > 0 && ` (${totalChangedCells} cells)`}
+                  </Button>
+                )}
               </div>
               <div className="flex gap-2">
                 {hasUnresolvedFixable ? (
@@ -1213,6 +1315,16 @@ export function Step4Quality({
           </div>
         );
       })()}
+
+      {/* Changes side sheet */}
+      {dataset && (
+        <ChangesSheet
+          dataset={dataset}
+          appliedOps={cleaning.applied}
+          isOpen={isChangesSheetOpen}
+          onClose={() => setIsChangesSheetOpen(false)}
+        />
+      )}
     </div>
   );
 }
