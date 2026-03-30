@@ -328,7 +328,7 @@ export function Step5Analysis({
       await dispatchTask(
         projectId,
         "run_analysis",
-        { dataset_id: datasetId },
+        { dataset_id: datasetId, project_id: projectId },
         datasetId,
       );
 
