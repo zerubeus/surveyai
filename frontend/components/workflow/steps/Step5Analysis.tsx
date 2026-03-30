@@ -171,7 +171,7 @@ export function Step5Analysis({
   const [showAutoApproveConfirm, setShowAutoApproveConfirm] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [updatingPlanIds, setUpdatingPlanIds] = useState<Set<string>>(new Set());
-  const [activeTab, setActiveTab] = useState("statistical");
+  const [activeTab, setActiveTab] = useState("descriptive");
   const [showCustomTestForm, setShowCustomTestForm] = useState(false);
   const [customTestForm, setCustomTestForm] = useState({
     rqText: "",
@@ -661,11 +661,25 @@ export function Step5Analysis({
       />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="descriptive">Descriptive</TabsTrigger>
-          <TabsTrigger value="statistical">Statistical Tests</TabsTrigger>
-          <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>
-        </TabsList>
+        <div className="flex items-center justify-between gap-4">
+          <TabsList className="grid grid-cols-2">
+            <TabsTrigger value="descriptive">Descriptive</TabsTrigger>
+            <TabsTrigger value="statistical">Statistical Tests</TabsTrigger>
+          </TabsList>
+          {/* Confirm Analysis button — always visible regardless of tab */}
+          <Button
+            size="sm"
+            disabled={!canRunAnalysis || isFinalizing}
+            onClick={handleRunAnalysis}
+          >
+            {isFinalizing ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <ArrowRight className="mr-2 h-4 w-4" />
+            )}
+            Confirm Analysis{approvedCount > 0 ? ` (${approvedCount})` : ""}
+          </Button>
+        </div>
 
         {/* ============================================================ */}
         {/*  TAB: Descriptive Analysis                                    */}
@@ -710,19 +724,6 @@ export function Step5Analysis({
                     Auto-approve all
                   </Button>
                 )}
-
-                <Button
-                  size="sm"
-                  disabled={!canRunAnalysis || isFinalizing}
-                  onClick={handleRunAnalysis}
-                >
-                  {isFinalizing ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <ArrowRight className="mr-2 h-4 w-4" />
-                  )}
-                  Run Analysis ({approvedCount})
-                </Button>
               </div>
               {!canRunAnalysis && plans.length > 0 && (
                 <p className="mt-2 text-xs text-muted-foreground text-right">
@@ -769,19 +770,123 @@ export function Step5Analysis({
               </Card>
             )}
 
+            {/* Summary Insights — visible when analysis results exist */}
+            {results.length > 0 && (
+              <Card className="border-blue-200 bg-blue-50/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <TrendingUp className="h-4 w-4 text-blue-600" />
+                    Summary Insights
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Significance counts */}
+                  <div className="flex flex-wrap gap-4">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <span className="text-sm font-medium">{significantCount} significant</span>
+                      <span className="text-xs text-muted-foreground">(p &lt; 0.05)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MinusCircle className="h-4 w-4 text-gray-400" />
+                      <span className="text-sm font-medium">{results.length - significantCount} non-significant</span>
+                    </div>
+                  </div>
+
+                  {/* Per-RQ traffic lights */}
+                  {insightGroupedResults.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Evidence per research question</p>
+                      <div className="space-y-1.5">
+                        {insightGroupedResults.map((group) => {
+                          const light = rqTrafficLights.get(group.rqText) ?? "red";
+                          return (
+                            <div key={group.rqText} className="flex items-start gap-2">
+                              {light === "green" && <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600" />}
+                              {light === "yellow" && <MinusCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-yellow-500" />}
+                              {light === "red" && <XCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" />}
+                              <p className="text-sm text-muted-foreground line-clamp-1">{group.rqText}</p>
+                              <Badge
+                                className={`ml-auto flex-shrink-0 text-xs ${
+                                  light === "green" ? "bg-green-100 text-green-800" :
+                                  light === "yellow" ? "bg-yellow-100 text-yellow-800" :
+                                  "bg-red-100 text-red-800"
+                                }`}
+                              >
+                                {light === "green" ? "Evidence found" : light === "yellow" ? "Mixed" : "No evidence"}
+                              </Badge>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Key predictors from regression results */}
+                  {results.some((r) => {
+                    const raw = r.raw_output as Record<string, unknown> | null;
+                    const details = raw?.test_details as Record<string, unknown> | null;
+                    return details && typeof details === "object" && "coefficients" in details;
+                  }) && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Key regression predictors</p>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b text-left text-muted-foreground">
+                              <th className="pb-1 pr-4 font-medium">Variable</th>
+                              <th className="pb-1 pr-4 font-medium">Coefficient</th>
+                              <th className="pb-1 font-medium">p-value</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {results.flatMap((r) => {
+                              const raw = r.raw_output as Record<string, unknown> | null;
+                              const details = raw?.test_details as Record<string, unknown> | null;
+                              if (!details || !("coefficients" in details)) return [];
+                              const coeffs = details.coefficients as Record<string, { estimate: number; p_value: number }>;
+                              return Object.entries(coeffs)
+                                .filter(([k]) => k !== "const")
+                                .slice(0, 3)
+                                .map(([varName, c]) => (
+                                  <tr key={`${r.id}-${varName}`} className="border-b last:border-0">
+                                    <td className="py-1 pr-4 font-medium">{varName}</td>
+                                    <td className="py-1 pr-4">{c.estimate > 0 ? "+" : ""}{c.estimate.toFixed(3)}</td>
+                                    <td className={`py-1 ${c.p_value < 0.05 ? "font-semibold text-green-700" : "text-muted-foreground"}`}>
+                                      {c.p_value < 0.001 ? "<0.001" : c.p_value.toFixed(3)}
+                                      {c.p_value < 0.05 && " *"}
+                                    </td>
+                                  </tr>
+                                ));
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Plans grouped by RQ */}
             <div className="space-y-4">
-              {Array.from(groupedPlans.entries()).map(([rqText, rqPlans]) => (
-                <RQCard
-                  key={rqText}
-                  rqText={rqText}
-                  plans={rqPlans}
-                  isExpanded={expandedRQs.has(rqText)}
-                  onToggle={() => toggleRQ(rqText)}
-                  onUpdateStatus={handleUpdatePlanStatus}
-                  updatingPlanIds={updatingPlanIds}
-                />
-              ))}
+              {Array.from(groupedPlans.entries()).map(([rqText, rqPlans]) => {
+                // Results for plans in this RQ
+                const planIds = new Set(rqPlans.map((p) => p.id));
+                const rqResults = results.filter((r) => planIds.has(r.plan_id));
+                return (
+                  <RQCard
+                    key={rqText}
+                    rqText={rqText}
+                    plans={rqPlans}
+                    results={rqResults}
+                    isExpanded={expandedRQs.has(rqText)}
+                    onToggle={() => toggleRQ(rqText)}
+                    onUpdateStatus={handleUpdatePlanStatus}
+                    updatingPlanIds={updatingPlanIds}
+                  />
+                );
+              })}
             </div>
 
             {/* Add Custom Test */}
@@ -886,104 +991,6 @@ export function Step5Analysis({
               </div>
             )}
 
-            {/* Summary Insights — visible when analysis results exist */}
-            {results.length > 0 && (
-              <Card className="border-blue-200 bg-blue-50/50">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <TrendingUp className="h-4 w-4 text-blue-600" />
-                    Summary Insights
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Significance counts */}
-                  <div className="flex flex-wrap gap-4">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      <span className="text-sm font-medium">{significantCount} significant</span>
-                      <span className="text-xs text-muted-foreground">(p &lt; 0.05)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <MinusCircle className="h-4 w-4 text-gray-400" />
-                      <span className="text-sm font-medium">{results.length - significantCount} non-significant</span>
-                    </div>
-                  </div>
-
-                  {/* Per-RQ traffic lights */}
-                  {insightGroupedResults.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Evidence per research question</p>
-                      <div className="space-y-1.5">
-                        {insightGroupedResults.map((group) => {
-                          const light = rqTrafficLights.get(group.rqText) ?? "red";
-                          return (
-                            <div key={group.rqText} className="flex items-start gap-2">
-                              {light === "green" && <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600" />}
-                              {light === "yellow" && <MinusCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-yellow-500" />}
-                              {light === "red" && <XCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" />}
-                              <p className="text-sm text-muted-foreground line-clamp-1">{group.rqText}</p>
-                              <Badge
-                                className={`ml-auto flex-shrink-0 text-xs ${
-                                  light === "green" ? "bg-green-100 text-green-800" :
-                                  light === "yellow" ? "bg-yellow-100 text-yellow-800" :
-                                  "bg-red-100 text-red-800"
-                                }`}
-                              >
-                                {light === "green" ? "Evidence found" : light === "yellow" ? "Mixed" : "No evidence"}
-                              </Badge>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Key predictors from regression results */}
-                  {results.some((r) => {
-                    const raw = r.raw_output as Record<string, unknown> | null;
-                    const details = raw?.test_details as Record<string, unknown> | null;
-                    return details && typeof details === "object" && "coefficients" in details;
-                  }) && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Key regression predictors</p>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="border-b text-left text-muted-foreground">
-                              <th className="pb-1 pr-4 font-medium">Variable</th>
-                              <th className="pb-1 pr-4 font-medium">Coefficient</th>
-                              <th className="pb-1 font-medium">p-value</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {results.flatMap((r) => {
-                              const raw = r.raw_output as Record<string, unknown> | null;
-                              const details = raw?.test_details as Record<string, unknown> | null;
-                              if (!details || !("coefficients" in details)) return [];
-                              const coeffs = details.coefficients as Record<string, { estimate: number; p_value: number }>;
-                              return Object.entries(coeffs)
-                                .filter(([k]) => k !== "const")
-                                .slice(0, 3)
-                                .map(([varName, c]) => (
-                                  <tr key={`${r.id}-${varName}`} className="border-b last:border-0">
-                                    <td className="py-1 pr-4 font-medium">{varName}</td>
-                                    <td className="py-1 pr-4">{c.estimate > 0 ? "+" : ""}{c.estimate.toFixed(3)}</td>
-                                    <td className={`py-1 ${c.p_value < 0.05 ? "font-semibold text-green-700" : "text-muted-foreground"}`}>
-                                      {c.p_value < 0.001 ? "<0.001" : c.p_value.toFixed(3)}
-                                      {c.p_value < 0.05 && " *"}
-                                    </td>
-                                  </tr>
-                                ));
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
             {/* Continue to Visualisation — visible when all plans completed */}
             {allCompleted && (
               <div className="flex justify-end border-t pt-4 mt-4">
@@ -996,12 +1003,6 @@ export function Step5Analysis({
           </div>
         </TabsContent>
 
-        {/* ============================================================ */}
-        {/*  TAB: Diagnostics                                             */}
-        {/* ============================================================ */}
-        <TabsContent value="diagnostics">
-          <DiagnosticsTab edaResults={edaResults} />
-        </TabsContent>
       </Tabs>
     </div>
   );
@@ -1048,6 +1049,7 @@ function WeightsBanner({
 interface RQCardProps {
   rqText: string;
   plans: AnalysisPlan[];
+  results: Tables<"analysis_results">[];
   isExpanded: boolean;
   onToggle: () => void;
   onUpdateStatus: (planId: string, status: "approved" | "rejected") => void;
@@ -1057,15 +1059,28 @@ interface RQCardProps {
 function RQCard({
   rqText,
   plans,
+  results,
   isExpanded,
   onToggle,
   onUpdateStatus,
   updatingPlanIds,
 }: RQCardProps) {
   const approvedInGroup = plans.filter((p) => p.status === "approved").length;
+  const completedResults = results.filter((r) => r.p_value !== null);
+  const sigResults = completedResults.filter((r) => r.p_value !== null && r.p_value < 0.05);
+  const hasResults = completedResults.length > 0;
+
+  // Traffic light for this RQ
+  const trafficLight: "green" | "yellow" | "red" | null = hasResults
+    ? sigResults.length === completedResults.length
+      ? "green"
+      : sigResults.length > 0
+      ? "yellow"
+      : "red"
+    : null;
 
   return (
-    <Card>
+    <Card className={trafficLight === "green" ? "border-green-200" : trafficLight === "yellow" ? "border-yellow-200" : trafficLight === "red" ? "border-red-100" : ""}>
       <CardHeader
         className="cursor-pointer select-none"
         onClick={onToggle}
@@ -1083,28 +1098,84 @@ function RQCard({
               </CardTitle>
               <CardDescription className="mt-1">
                 {plans.length} test{plans.length !== 1 ? "s" : ""} proposed
-                {approvedInGroup > 0 && (
-                  <> · {approvedInGroup} approved</>
-                )}
+                {approvedInGroup > 0 && <> · {approvedInGroup} approved</>}
+                {hasResults && <> · {sigResults.length}/{completedResults.length} significant</>}
               </CardDescription>
             </div>
           </div>
-          <div className="flex shrink-0 gap-1">
-            {plans.map((p) => (
-              <span
-                key={p.id}
-                className={`h-2 w-2 rounded-full ${
-                  p.status === "approved"
-                    ? "bg-green-500"
-                    : p.status === "rejected"
+
+          {/* Indicators shown in collapsed state */}
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Traffic light + evidence badge */}
+            {trafficLight === "green" && (
+              <Badge className="bg-green-100 text-green-800 text-xs hover:bg-green-100">Evidence found</Badge>
+            )}
+            {trafficLight === "yellow" && (
+              <Badge className="bg-yellow-100 text-yellow-800 text-xs hover:bg-yellow-100">Mixed evidence</Badge>
+            )}
+            {trafficLight === "red" && (
+              <Badge className="bg-red-50 text-red-700 text-xs hover:bg-red-50">No evidence</Badge>
+            )}
+
+            {/* Key stat from top result */}
+            {sigResults.length > 0 && (() => {
+              const top = sigResults.reduce((a, b) =>
+                Math.abs(a.effect_size_value) > Math.abs(b.effect_size_value) ? a : b
+              );
+              return (
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {top.effect_size_name} = {Math.abs(top.effect_size_value).toFixed(2)}
+                </span>
+              );
+            })()}
+
+            {/* Plan status dots */}
+            <div className="flex gap-1">
+              {plans.map((p) => (
+                <span
+                  key={p.id}
+                  className={`h-2 w-2 rounded-full ${
+                    p.status === "approved" || p.status === "completed"
+                      ? "bg-green-500"
+                      : p.status === "rejected"
                       ? "bg-gray-400"
                       : "bg-yellow-400"
-                }`}
-                title={`${p.dependent_variable} × ${p.independent_variable}: ${p.status}`}
-              />
-            ))}
+                  }`}
+                  title={`${p.dependent_variable} × ${p.independent_variable}: ${p.status}`}
+                />
+              ))}
+            </div>
           </div>
         </div>
+
+        {/* Per-test result pills — shown in collapsed state when results available */}
+        {!isExpanded && hasResults && (
+          <div className="mt-2 flex flex-wrap gap-1.5 pl-6">
+            {completedResults.map((r) => {
+              const plan = plans.find((p) => p.id === r.plan_id);
+              const isSig = r.p_value !== null && r.p_value < 0.05;
+              return (
+                <span
+                  key={r.id}
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${
+                    isSig
+                      ? "bg-green-50 text-green-700 border border-green-200"
+                      : "bg-gray-50 text-gray-500 border border-gray-200"
+                  }`}
+                  title={`p = ${r.p_value?.toFixed(4)}`}
+                >
+                  <span className={`h-1.5 w-1.5 rounded-full ${isSig ? "bg-green-500" : "bg-gray-400"}`} />
+                  {plan?.dependent_variable ?? "?"} × {plan?.independent_variable ?? "?"}
+                  {r.p_value !== null && (
+                    <span className="opacity-70">
+                      {" "}p={r.p_value < 0.001 ? "<.001" : r.p_value.toFixed(3)}
+                    </span>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+        )}
       </CardHeader>
 
       {isExpanded && (
