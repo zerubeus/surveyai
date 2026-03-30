@@ -55,16 +55,16 @@ export default async function Step7Page({
     datasetId
       ? supabase
           .from("column_mappings")
-          .select("original_name")
+          .select("column_name")
           .eq("dataset_id", datasetId)
-      : Promise.resolve({ data: [] as { original_name: string }[] }),
+      : Promise.resolve({ data: [] as { column_name: string }[] }),
   ]);
 
   const plans = (plansRes.data ?? []) as Tables<"analysis_plans">[];
   const results = (resultsRes.data ?? []) as Tables<"analysis_results">[];
   const charts = (chartsRes.data ?? []) as Tables<"charts">[];
   const columns = (mappingsRes.data ?? []).map(
-    (m: { original_name: string }) => m.original_name,
+    (m: { column_name: string }) => m.column_name,
   );
 
   // Build signed URLs for charts

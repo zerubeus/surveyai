@@ -36,7 +36,8 @@ import {
   PieChart,
   Plus,
 } from "lucide-react";
-import { ResultChart } from "@/components/workflow/ResultChart";
+import { ResultChart, DistributionChart } from "@/components/workflow/ResultChart";
+import type { DistributionData } from "@/components/workflow/ResultChart";
 import { toast } from "@/lib/toast";
 import type { Tables, Json } from "@/lib/types/database";
 
@@ -124,6 +125,22 @@ export function Step7Visualisation({
   /* ---------- Derived ---------- */
   const totalCharts = results.length;
   const includedCount = includedIds.size;
+
+  /** Unique column distributions from results */
+  const columnDistributions = useMemo(() => {
+    const seen = new Map<string, DistributionData>();
+    for (const r of results) {
+      const plan = planMap.get(r.plan_id);
+      if (!plan) continue;
+      const raw = r.raw_output as Record<string, unknown> | null;
+      const chartData = raw?.chart_data as Record<string, unknown> | null;
+      const dist = chartData?.distribution as DistributionData | undefined;
+      if (dist && !seen.has(plan.dependent_variable)) {
+        seen.set(plan.dependent_variable, dist);
+      }
+    }
+    return Array.from(seen.entries());
+  }, [results, planMap]);
 
   /* ---------- Handlers ---------- */
 
@@ -271,14 +288,32 @@ export function Step7Visualisation({
         </p>
       </div>
 
-      {/* Progress */}
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <CheckCircle2 className="h-4 w-4 text-green-600" />
-        <span>
-          <strong className="text-foreground">{includedCount}</strong> of{" "}
-          <strong className="text-foreground">{totalCharts}</strong> charts
-          selected for report
-        </span>
+      {/* Progress + bulk actions */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <span>
+            <strong className="text-foreground">{includedCount}</strong> of{" "}
+            <strong className="text-foreground">{totalCharts}</strong> charts
+            selected for report
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setIncludedIds(new Set(results.map((r) => r.id)))}
+          >
+            Include All ({results.length})
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setIncludedIds(new Set())}
+          >
+            Exclude All
+          </Button>
+        </div>
       </div>
 
       {/* Chart grid */}
@@ -387,6 +422,27 @@ export function Step7Visualisation({
           );
         })}
       </div>
+
+      {/* Column Distributions */}
+      {columnDistributions.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-base font-semibold">Column Distributions</h3>
+          <div className="grid gap-6 md:grid-cols-2">
+            {columnDistributions.map(([colName, dist]) => (
+              <Card key={colName} className="border-purple-200">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">
+                    Distribution: {colName}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <DistributionChart distribution={dist} />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Custom chart section */}
       <Collapsible open={showCustomChart} onOpenChange={setShowCustomChart}>

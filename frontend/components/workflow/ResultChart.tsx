@@ -14,6 +14,9 @@ import {
   ComposedChart,
   ResponsiveContainer,
   ErrorBar,
+  PieChart as RechartsPieChart,
+  Pie,
+  Cell,
 } from "recharts";
 import type { Tables } from "@/lib/types/database";
 
@@ -135,6 +138,87 @@ export function ContingencyTable({
 }
 
 /* ------------------------------------------------------------------ */
+/*  DistributionChart                                                  */
+/* ------------------------------------------------------------------ */
+
+interface DistributionBucket {
+  label: string;
+  count: number;
+}
+interface DistributionCategory {
+  name: string;
+  count: number;
+}
+export interface DistributionData {
+  type: "histogram" | "categorical";
+  buckets?: DistributionBucket[];
+  categories?: DistributionCategory[];
+}
+
+export function DistributionChart({ distribution }: { distribution: DistributionData }) {
+  if (distribution.type === "categorical" && distribution.categories) {
+    const data = distribution.categories;
+    return (
+      <div className="space-y-3">
+        {/* Pie chart */}
+        <div className="overflow-hidden rounded-lg border bg-white p-4">
+          <ResponsiveContainer width="100%" height={220}>
+            <RechartsPieChart>
+              <Pie
+                data={data}
+                dataKey="count"
+                nameKey="name"
+                cx="50%"
+                cy="50%"
+                outerRadius={80}
+                label={({ name, percent }: { name: string; percent: number }) =>
+                  `${name} (${(percent * 100).toFixed(0)}%)`
+                }
+                labelLine={false}
+              >
+                {data.map((_, i) => (
+                  <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </RechartsPieChart>
+          </ResponsiveContainer>
+        </div>
+        {/* Bar chart for readability */}
+        <div className="overflow-hidden rounded-lg border bg-white p-4">
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={data} layout="vertical">
+              <XAxis type="number" tick={{ fontSize: 11 }} />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={100} />
+              <Tooltip />
+              <Bar dataKey="count" fill="#3b82f6" fillOpacity={0.6} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    );
+  }
+
+  if (distribution.type === "histogram" && distribution.buckets) {
+    const data = distribution.buckets;
+    return (
+      <div className="overflow-hidden rounded-lg border bg-white p-4">
+        <ResponsiveContainer width="100%" height={220}>
+          <BarChart data={data} barCategoryGap={0} barGap={0}>
+            <XAxis dataKey="label" tick={{ fontSize: 9 }} interval={0} angle={-30} textAnchor="end" height={50} />
+            <YAxis tick={{ fontSize: 11 }} />
+            <Tooltip />
+            <Bar dataKey="count" fill="#8b5cf6" fillOpacity={0.6} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+/* ------------------------------------------------------------------ */
 /*  ResultChart                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -155,6 +239,9 @@ export function ResultChart({
   const indepVar = plan.independent_variable;
   const depVar = plan.dependent_variable;
   const pValue = result.p_value;
+  const distribution = chartData?.distribution as DistributionData | undefined;
+
+  let mainChart: React.ReactNode = null;
 
   // Categorical tests — contingency table bar chart + pivot table
   if (
@@ -173,7 +260,7 @@ export function ResultChart({
       return entry;
     });
 
-    return (
+    mainChart = (
       <div className="space-y-3">
         <div className="overflow-hidden rounded-lg border bg-white p-4">
           <ResponsiveContainer width="100%" height={260}>
@@ -204,7 +291,7 @@ export function ResultChart({
   }
 
   // Group comparison tests — bar chart with mean + std error bars
-  if (
+  else if (
     (testName === "t_test" || testName === "mann_whitney" || testName === "welchs_t" ||
      testName === "anova" || testName === "kruskal_wallis") &&
     chartData?.group_stats
@@ -218,7 +305,7 @@ export function ResultChart({
       errorY: [s.std, s.std],
     }));
 
-    return (
+    mainChart = (
       <div className="overflow-hidden rounded-lg border bg-white p-4">
         <ResponsiveContainer width="100%" height={260}>
           <ComposedChart data={barData}>
@@ -245,13 +332,13 @@ export function ResultChart({
   }
 
   // Correlation — scatter chart
-  if (
+  else if (
     (testName === "pearson" || testName === "spearman" || testName === "kendall_tau") &&
     chartData?.scatter_sample
   ) {
     const scatter = chartData.scatter_sample as { x: number; y: number }[];
 
-    return (
+    mainChart = (
       <div className="overflow-hidden rounded-lg border bg-white p-4">
         <ResponsiveContainer width="100%" height={260}>
           <ScatterChart>
@@ -273,7 +360,7 @@ export function ResultChart({
   }
 
   // Linear regression — scatter + regression line
-  if (testName === "linear_regression" && chartData?.scatter_sample) {
+  else if (testName === "linear_regression" && chartData?.scatter_sample) {
     const scatter = chartData.scatter_sample as { x: number; y: number }[];
     const regLine = chartData.regression_line as { slope: number; intercept: number } | null;
 
@@ -288,7 +375,7 @@ export function ResultChart({
       ];
     }
 
-    return (
+    mainChart = (
       <div className="overflow-hidden rounded-lg border bg-white p-4">
         <ResponsiveContainer width="100%" height={260}>
           <ComposedChart>
@@ -313,8 +400,8 @@ export function ResultChart({
   }
 
   // Fallback: show PNG image if available
-  if (chartUrl) {
-    return (
+  else if (chartUrl) {
+    mainChart = (
       <div className="overflow-hidden rounded-lg border bg-white">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -326,14 +413,46 @@ export function ResultChart({
     );
   }
 
-  // No chart data and no PNG
-  if (!chartData && !chartUrl) {
-    return (
-      <div className="flex items-center justify-center rounded-lg border border-dashed bg-muted/30 py-8">
-        <p className="text-xs text-muted-foreground">Chart will be generated with report</p>
+  // No chart data and no PNG — show stat summary fallback
+  else if (!chartData && !chartUrl) {
+    mainChart = (
+      <div className="rounded-lg border border-dashed bg-muted/30 p-4 space-y-1">
+        <div className="grid grid-cols-3 gap-2 text-center text-xs">
+          <div>
+            <p className="text-muted-foreground">p-value</p>
+            <p className="font-medium tabular-nums">
+              {pValue !== null ? (pValue < 0.001 ? "< 0.001" : pValue.toFixed(4)) : "N/A"}
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Effect size</p>
+            <p className="font-medium tabular-nums">
+              {result.effect_size_value != null ? result.effect_size_value.toFixed(3) : "N/A"}
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Sample</p>
+            <p className="font-medium tabular-nums">
+              n = {result.sample_size ?? "N/A"}
+            </p>
+          </div>
+        </div>
+        <p className="text-center text-[10px] text-muted-foreground pt-1">
+          {formatTestName(testName ?? "unknown")}
+        </p>
       </div>
     );
   }
 
-  return null;
+  // Wrap with distribution chart if available
+  if (distribution && mainChart) {
+    return (
+      <div className="space-y-3">
+        {mainChart}
+        <DistributionChart distribution={distribution} />
+      </div>
+    );
+  }
+
+  return mainChart;
 }

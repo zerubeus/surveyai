@@ -278,15 +278,16 @@ def _build_chart_data(
     test_result: dict[str, Any],
 ) -> dict[str, Any] | None:
     """Build chart_data dict for client-side Recharts rendering."""
+    result: dict[str, Any] | None = None
     try:
         mask = df[dep_var].notna() & df[indep_var].notna()
         sub = df.loc[mask]
 
         if test_name in ("chi_square", "fishers_exact"):
             ct = pd.crosstab(sub[indep_var], sub[dep_var])
-            return {"contingency_table": ct.to_dict()}
+            result = {"contingency_table": ct.to_dict()}
 
-        if test_name in ("t_test", "mann_whitney", "welchs_t", "anova", "kruskal_wallis"):
+        elif test_name in ("t_test", "mann_whitney", "welchs_t", "anova", "kruskal_wallis"):
             numeric_dep = pd.to_numeric(sub[dep_var], errors="coerce")
             valid = sub.loc[numeric_dep.notna()]
             numeric_dep = numeric_dep.loc[valid.index]
@@ -299,52 +300,81 @@ def _build_chart_data(
                     "std": round(float(vals.std()), 4),
                     "n": int(len(vals)),
                 }
-            return {"group_stats": group_stats}
+            result = {"group_stats": group_stats}
 
-        if test_name in ("pearson", "spearman", "kendall_tau"):
+        elif test_name in ("pearson", "spearman", "kendall_tau"):
             x = pd.to_numeric(sub[indep_var], errors="coerce").dropna()
             y = pd.to_numeric(sub[dep_var], errors="coerce").dropna()
             common = x.index.intersection(y.index)
             sample_n = min(200, len(common))
-            if sample_n == 0:
-                return None
-            sampled = sub.loc[common].sample(sample_n, random_state=42)
-            scatter = [
-                {"x": round(float(row[indep_var]), 4), "y": round(float(row[dep_var]), 4)}
-                for _, row in sampled.iterrows()
-                if pd.notna(row[indep_var]) and pd.notna(row[dep_var])
-            ]
-            return {"scatter_sample": scatter}
+            if sample_n > 0:
+                sampled = sub.loc[common].sample(sample_n, random_state=42)
+                scatter = [
+                    {"x": round(float(row[indep_var]), 4), "y": round(float(row[dep_var]), 4)}
+                    for _, row in sampled.iterrows()
+                    if pd.notna(row[indep_var]) and pd.notna(row[dep_var])
+                ]
+                result = {"scatter_sample": scatter}
 
-        if test_name == "linear_regression":
+        elif test_name == "linear_regression":
             x = pd.to_numeric(sub[indep_var], errors="coerce").dropna()
             y = pd.to_numeric(sub[dep_var], errors="coerce").dropna()
             common = x.index.intersection(y.index)
             sample_n = min(200, len(common))
-            if sample_n == 0:
-                return None
-            sampled = sub.loc[common].sample(sample_n, random_state=42)
-            scatter = [
-                {"x": round(float(row[indep_var]), 4), "y": round(float(row[dep_var]), 4)}
-                for _, row in sampled.iterrows()
-                if pd.notna(row[indep_var]) and pd.notna(row[dep_var])
-            ]
-            coefficients = test_result.get("coefficients", {})
-            # Get slope from the indep_var coefficient
-            indep_coef = coefficients.get(indep_var, {})
-            slope = indep_coef.get("estimate", 0.0) if isinstance(indep_coef, dict) else 0.0
-            const_coef = coefficients.get("const", {})
-            intercept = const_coef.get("estimate", 0.0) if isinstance(const_coef, dict) else 0.0
-            return {
-                "scatter_sample": scatter,
-                "regression_line": {"slope": round(float(slope), 4), "intercept": round(float(intercept), 4)},
-            }
+            if sample_n > 0:
+                sampled = sub.loc[common].sample(sample_n, random_state=42)
+                scatter = [
+                    {"x": round(float(row[indep_var]), 4), "y": round(float(row[dep_var]), 4)}
+                    for _, row in sampled.iterrows()
+                    if pd.notna(row[indep_var]) and pd.notna(row[dep_var])
+                ]
+                coefficients = test_result.get("coefficients", {})
+                indep_coef = coefficients.get(indep_var, {})
+                slope = indep_coef.get("estimate", 0.0) if isinstance(indep_coef, dict) else 0.0
+                const_coef = coefficients.get("const", {})
+                intercept = const_coef.get("estimate", 0.0) if isinstance(const_coef, dict) else 0.0
+                result = {
+                    "scatter_sample": scatter,
+                    "regression_line": {"slope": round(float(slope), 4), "intercept": round(float(intercept), 4)},
+                }
+
+        # Always add distribution data for the dependent variable
+        try:
+            dep_series = sub[dep_var].dropna()
+            dep_numeric = pd.to_numeric(dep_series, errors="coerce")
+            n_numeric = dep_numeric.notna().sum()
+            n_total = len(dep_series)
+
+            if n_numeric / max(n_total, 1) > 0.7:
+                # Numeric: histogram buckets
+                hist_values, bin_edges = np.histogram(
+                    dep_numeric.dropna(), bins=min(20, int(n_numeric**0.5) + 1)
+                )
+                distribution = {
+                    "type": "histogram",
+                    "buckets": [
+                        {"label": f"{bin_edges[i]:.1f}\u2013{bin_edges[i+1]:.1f}", "count": int(hist_values[i])}
+                        for i in range(len(hist_values))
+                    ],
+                }
+            else:
+                # Categorical: value counts for pie/bar
+                vc = dep_series.value_counts().head(15)
+                distribution = {
+                    "type": "categorical",
+                    "categories": [{"name": str(k), "count": int(v)} for k, v in vc.items()],
+                }
+
+            result = result or {}
+            result["distribution"] = distribution
+        except Exception:
+            pass
+
+        return result
 
     except Exception as e:
         logger.warning("chart_data_build_failed", error=str(e))
         return None
-
-    return None
 
 
 def _check_assumptions_and_select(
