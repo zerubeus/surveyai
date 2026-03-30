@@ -455,12 +455,14 @@ export function Step4Quality({
             // @ts-ignore — supabase insert type inference
             .insert({
               dataset_id: datasetId,
-              operation_type: "fix_encoding",
+              operation_type: "custom",
               column_name: issue.columnName ?? null,
               description: customText,
-              rationale: "User-defined fix",
+              reasoning: "User-defined fix",
+              confidence: 1.0,
               status: "approved",
               priority: 99,
+              parameters: {},
             })
             .select("id")
             .single();
