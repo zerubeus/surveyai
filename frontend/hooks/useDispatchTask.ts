@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { createBrowserClient } from "@/lib/supabase/browser";
-import type { Enums } from "@/lib/types/database";
+import type { Enums, Json } from "@/lib/types/database";
 
 type TaskType = Enums<"task_type">;
 
@@ -53,36 +53,24 @@ export function useDispatchTask() {
           : payload;
 
         // Rate-limit: max 3 active tasks per project at a time
-        // @ts-ignore — supabase select type inference
-        const { data: activeRaw } = await supabase
-          .from("tasks")
-          .select("id", { count: "exact", head: true })
-          .eq("project_id", projectId)
-          .eq("task_type", taskType)
-          .in("status", ["pending", "claimed", "running"]);
-        const activeCount = (activeRaw as unknown as { count: number } | null)?.count ?? 0;
-        // Note: supabase returns count via headers — check length as fallback
-        // @ts-ignore
-        const countRaw = await supabase
+        const { data: activeTasks } = await supabase
           .from("tasks")
           .select("id")
           .eq("project_id", projectId)
           .eq("task_type", taskType)
           .in("status", ["pending", "claimed", "running"]);
-        // @ts-ignore
-        const activeTasks = (countRaw?.data ?? []) as Array<{ id: string }>;
-        if (activeTasks.length >= 3) {
+
+        if ((activeTasks ?? []).length >= 3) {
           throw new Error("A task of this type is already running. Please wait for it to complete before starting another.");
         }
 
-        // @ts-ignore — supabase insert type inference
-        const { data: taskRaw, error } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: taskRaw, error } = await (supabase as any)
           .from("tasks")
-          // @ts-ignore — supabase type inference
           .insert({
             project_id: projectId,
             task_type: taskType,
-            payload: taskPayload,
+            payload: taskPayload as Json,
             created_by: user.id,
           })
           .select("id")

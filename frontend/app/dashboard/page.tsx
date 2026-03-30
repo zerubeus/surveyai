@@ -26,30 +26,22 @@ export default async function DashboardPage() {
   const projects = projectsRaw as Project[] | null;
 
   // Fetch quality scores for projects that have completed EDA
-  // @ts-ignore — supabase select type inference
-  const { data: qualityRaw } = await supabase
-    .from("eda_results")
-    .select("dataset_id, quality_score")
-    .eq("result_type", "dataset_summary")
-    .in(
-      "dataset_id",
-      // Get dataset IDs for these projects
-      (projects ?? []).map((p) => p.id), // will be overridden below
-    );
-  // Actually join through datasets
-  // @ts-ignore — supabase select type inference
+  const projectIds = (projects ?? []).map((p) => p.id);
+
+  // Get datasets for these projects
   const { data: datasetsRaw } = await supabase
     .from("datasets")
     .select("id, project_id")
-    .in("project_id", (projects ?? []).map((p) => p.id));
+    .in("project_id", projectIds);
   const datasets = datasetsRaw as Array<{ id: string; project_id: string }> | null;
 
-  // @ts-ignore — supabase select type inference
+  // Get EDA results with quality scores
+  const datasetIds = (datasets ?? []).map((d) => d.id);
   const { data: edaRaw } = await supabase
     .from("eda_results")
     .select("dataset_id, quality_score")
     .eq("result_type", "dataset_summary")
-    .in("dataset_id", (datasets ?? []).map((d) => d.id));
+    .in("dataset_id", datasetIds);
   const edaResults = edaRaw as Array<{ dataset_id: string; quality_score: number | null }> | null;
 
   // Build projectId → quality_score map

@@ -80,7 +80,7 @@ export default function ReportPage() {
   const [genTaskId, setGenTaskId] = useState<string | null>(null);
   const [chartUrls, setChartUrls] = useState<Record<string, string>>({});
 
-  const { dispatchTask, isDispatching } = useDispatchTask();
+  const { dispatchTask, isDispatching, error: dispatchError } = useDispatchTask();
   const genProgress = useTaskProgress(genTaskId);
   const { report, sections, exports, refetch: refetchReport } = useReport(projectId);
 
@@ -158,8 +158,8 @@ export default function ReportPage() {
           try {
             const parsed = JSON.parse(linked);
             if (Array.isArray(parsed)) allChartIds.push(...parsed);
-          } catch {
-            // ignore
+          } catch (err) {
+            console.warn("Failed to parse linked_charts JSON:", err);
           }
         }
       }
@@ -186,8 +186,8 @@ export default function ReportPage() {
             if (data?.signedUrl) {
               urls[chart.id] = data.signedUrl;
             }
-          } catch {
-            // skip
+          } catch (err) {
+            console.warn("Failed to create signed URL for chart:", chart.id, err);
           }
         }
       }
@@ -253,8 +253,8 @@ export default function ReportPage() {
         dataset.id,
       );
       setGenTaskId(taskId);
-    } catch {
-      // Error handled by useDispatchTask
+    } catch (err) {
+      console.error("Failed to dispatch generate_report:", err);
     }
   }, [dataset, project, projectId, selectedTemplate, report, dispatchTask]);
 
@@ -375,11 +375,11 @@ export default function ReportPage() {
           )}
 
           {/* Generation error */}
-          {genProgress.error && (
+          {(genProgress.error || dispatchError) && (
             <Card className="border-red-200 dark:border-red-900">
               <CardContent className="p-4">
                 <p className="text-sm text-red-600 dark:text-red-400">
-                  {genProgress.error}
+                  {genProgress.error || dispatchError}
                 </p>
               </CardContent>
             </Card>

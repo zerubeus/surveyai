@@ -129,7 +129,8 @@ def generate_report(db: SupabaseDB, task_id: str, payload: dict[str, Any]) -> No
     additional_ctx_raw = project.get("additional_context") or "{}"
     try:
         additional_ctx = json.loads(additional_ctx_raw) if isinstance(additional_ctx_raw, str) else (additional_ctx_raw or {})
-    except Exception:
+    except Exception as e:
+        logger.warning("additional_context_parse_failed", error=str(e), raw=str(additional_ctx_raw)[:200])
         additional_ctx = {}
     knowledge_base = additional_ctx.get("knowledge_base") or {}
     project_context["knowledge_base"] = knowledge_base

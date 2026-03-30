@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ProjectContextForm } from "@/components/projects/ProjectContextForm";
+import { toast } from "@/lib/toast";
 import type { ProjectFormData } from "@/lib/schemas/project";
 
 /* ------------------------------------------------------------------ */
@@ -123,7 +124,7 @@ function FileDropZone({
       if (!files || files.length === 0) return;
       const f = files[0];
       if (f.size > MAX_FILE_SIZE) {
-        alert("File exceeds 50MB limit");
+        toast("File exceeds 50MB limit", { variant: "error" });
         return;
       }
       onFileSelect(f);

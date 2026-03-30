@@ -500,8 +500,12 @@ export function Step7Report({
 
       const url = `${window.location.origin}/share/${token}`;
       setShareUrl(url);
-      await navigator.clipboard.writeText(url).catch(() => {});
-      toast("Share link copied to clipboard!", { variant: "success" });
+      try {
+        await navigator.clipboard.writeText(url);
+        toast("Share link copied to clipboard!", { variant: "success" });
+      } catch {
+        toast("Share link generated! Click to copy.", { variant: "success" });
+      }
     } catch (err) {
       toast(`Failed to generate share link: ${err instanceof Error ? err.message : "unknown"}`, { variant: "error" });
     } finally {
@@ -1000,7 +1004,11 @@ function ExportPanel({
               <code className="flex-1 truncate text-xs text-blue-700">{shareUrl}</code>
               <button
                 type="button"
-                onClick={() => { navigator.clipboard.writeText(shareUrl).catch(() => {}); toast("Copied!", { variant: "success", duration: 2000 }); }}
+                onClick={() => {
+                  navigator.clipboard.writeText(shareUrl)
+                    .then(() => toast("Copied!", { variant: "success", duration: 2000 }))
+                    .catch(() => toast("Failed to copy", { variant: "error", duration: 2000 }));
+                }}
                 className="rounded px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-200"
               >
                 Copy

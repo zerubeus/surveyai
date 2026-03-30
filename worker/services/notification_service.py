@@ -57,8 +57,12 @@ def send_analysis_complete_email(
             return
 
         # Get user email from auth.users via service role
-        user_data = db.client.auth.admin.get_user_by_id(created_by)
-        email = getattr(user_data.user, "email", None) if user_data and user_data.user else None
+        try:
+            user_data = db.client.auth.admin.get_user_by_id(created_by)
+            email = getattr(user_data.user, "email", None) if user_data and user_data.user else None
+        except Exception as e:
+            logger.warning("get_user_email_failed", error=str(e), user_id=created_by)
+            return
         if not email:
             return
 

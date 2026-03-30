@@ -40,7 +40,7 @@ export default function CleaningPage() {
   const [ranWithNoSuggestions, setRanWithNoSuggestions] = useState(false);
   const [generateTaskId, setGenerateTaskId] = useState<string | null>(null);
 
-  const { dispatchTask, isDispatching } = useDispatchTask();
+  const { dispatchTask, isDispatching, error: dispatchError } = useDispatchTask();
   const generateProgress = useTaskProgress(generateTaskId);
 
   const {
@@ -111,8 +111,8 @@ export default function CleaningPage() {
         dataset.id,
       );
       setGenerateTaskId(taskId);
-    } catch {
-      // Error handled by useDispatchTask
+    } catch (err) {
+      console.error("Failed to dispatch generate_cleaning_suggestions:", err);
     }
   }, [dataset, projectId, dispatchTask]);
 
@@ -279,11 +279,11 @@ export default function CleaningPage() {
         )}
 
         {/* Generation error */}
-        {generateProgress.error && (
+        {(generateProgress.error || dispatchError) && (
           <Card className="border-red-200 dark:border-red-900">
             <CardContent className="p-4">
               <p className="text-sm text-red-600 dark:text-red-400">
-                {generateProgress.error}
+                {generateProgress.error || dispatchError}
               </p>
             </CardContent>
           </Card>

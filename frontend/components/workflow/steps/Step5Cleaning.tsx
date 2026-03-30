@@ -247,11 +247,18 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
 
   const handleSkip = useCallback(
     async (op: CleaningOperation) => {
-      await supabase
-        .from("cleaning_operations")
-        // @ts-ignore
-        .update({ status: "rejected" as Enums<"cleaning_op_status"> })
-        .eq("id", op.id);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
+          .from("cleaning_operations")
+          .update({ status: "rejected" })
+          .eq("id", op.id);
+        if (error) throw error;
+        toast("Operation skipped", { variant: "success" });
+      } catch (err) {
+        console.error("Failed to skip operation:", err);
+        toast("Failed to skip operation", { variant: "error" });
+      }
     },
     [supabase],
   );
@@ -260,11 +267,12 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
     async (op: CleaningOperation) => {
       setActioningOpId(op.id);
       try {
-        await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
           .from("cleaning_operations")
-          // @ts-ignore
-          .update({ status: "undone" as Enums<"cleaning_op_status"> })
+          .update({ status: "undone" })
           .eq("id", op.id);
+        if (error) throw error;
         toast("Operation rolled back", { variant: "success" });
       } catch {
         toast("Failed to roll back", { variant: "error" });

@@ -367,8 +367,8 @@ def _build_chart_data(
 
             result = result or {}
             result["distribution"] = distribution
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("chart_distribution_build_failed", error=str(e))
 
         return result
 

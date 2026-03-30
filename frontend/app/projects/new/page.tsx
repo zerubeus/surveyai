@@ -154,6 +154,8 @@ export default function NewProjectPage() {
       if (membership) {
         setOrgId((membership as { organization_id: string }).organization_id);
       }
+    }).catch((err) => {
+      console.error("Failed to load user/org:", err);
     });
   }, [router]);
 
@@ -293,7 +295,8 @@ export default function NewProjectPage() {
       setStatus("error");
       setStatusMsg(String(err));
     }
-  }, [csvFile, instrumentFile, orgId, userId, router]);
+  // Note: instrumentFile is collected by UI but upload not yet implemented
+  }, [csvFile, orgId, userId, router]);
 
   const isLoading = status === "uploading" || status === "analyzing";
   const progressMsg = isLoading

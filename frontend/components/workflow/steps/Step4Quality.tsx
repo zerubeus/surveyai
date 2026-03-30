@@ -475,7 +475,7 @@ export function Step4Quality({
           datasetId,
         )
           .then(({ taskId }) => setInterpretTaskId(taskId))
-          .catch(() => {});
+          .catch((err) => console.error("Failed to dispatch interpret_results:", err));
       }
       if (!cleaningDispatched.current && cleaning.all.length === 0 && !cleaningSuggestionsTaskId) {
         cleaningDispatched.current = true;
@@ -486,7 +486,7 @@ export function Step4Quality({
           datasetId,
         )
           .then(({ taskId }) => setCleaningSuggestionsTaskId(taskId))
-          .catch(() => {});
+          .catch((err) => console.error("Failed to dispatch generate_cleaning_suggestions:", err));
       }
     }
   }, [

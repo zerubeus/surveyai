@@ -42,7 +42,7 @@ export function ExportPanel({
   const [exportTaskId, setExportTaskId] = useState<string | null>(null);
   const [zipTaskId, setZipTaskId] = useState<string | null>(null);
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
-  const { dispatchTask, isDispatching } = useDispatchTask();
+  const { dispatchTask, isDispatching, error: dispatchError } = useDispatchTask();
   const exportProgress = useTaskProgress(exportTaskId);
   const zipProgress = useTaskProgress(zipTaskId);
   const isZipping = zipProgress.status === "running" || zipProgress.status === "claimed" || zipProgress.status === "pending";
@@ -97,21 +97,25 @@ export function ExportPanel({
         { report_id: reportId, formats: ["docx", "pdf"] },
       );
       setExportTaskId(taskId);
-    } catch {
-      // Error handled by useDispatchTask
+    } catch (err) {
+      console.error("Failed to dispatch export_report:", err);
     }
   }, [projectId, reportId, dispatchTask]);
 
   const handleExportZip = useCallback(async () => {
+    if (!datasetId) {
+      console.warn("Cannot export ZIP: no dataset ID");
+      return;
+    }
     try {
       const { taskId } = await dispatchTask(
         projectId,
         "export_zip",
-        { report_id: reportId, dataset_id: datasetId ?? "" },
+        { report_id: reportId, dataset_id: datasetId },
       );
       setZipTaskId(taskId);
-    } catch {
-      // Error handled by useDispatchTask
+    } catch (err) {
+      console.error("Failed to dispatch export_zip:", err);
     }
   }, [projectId, reportId, datasetId, dispatchTask]);
 
@@ -159,9 +163,9 @@ export function ExportPanel({
         )}
 
         {/* Export error */}
-        {exportProgress.error && (
+        {(exportProgress.error || dispatchError) && (
           <p className="text-sm text-red-600 dark:text-red-400">
-            {exportProgress.error}
+            {exportProgress.error || dispatchError}
           </p>
         )}
 
@@ -183,6 +187,11 @@ export function ExportPanel({
             <Progress value={zipProgress.progress} className="h-2" />
             <p className="text-xs text-muted-foreground">{zipProgress.progressMessage ?? "Bundling report, charts & dataset…"}</p>
           </div>
+        )}
+        {zipProgress.error && (
+          <p className="text-sm text-red-600 dark:text-red-400">
+            {zipProgress.error}
+          </p>
         )}
         <p className="text-xs text-muted-foreground">ZIP includes: DOCX + PDF report, all chart images, cleaned dataset CSV</p>
 

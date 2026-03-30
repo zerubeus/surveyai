@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { createBrowserClient } from "@/lib/supabase/browser";
+import { toast } from "@/lib/toast";
 import {
   Card,
   CardContent,
@@ -33,11 +34,15 @@ export function ReportEditor({ sections, chartUrls }: ReportEditorProps) {
       setSavingId(sectionId);
       try {
         const supabase = createBrowserClient();
-        await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
           .from("report_sections")
-          // @ts-expect-error — supabase update type inference
           .update({ content })
           .eq("id", sectionId);
+        if (error) throw error;
+      } catch (err) {
+        console.error("Failed to save section:", err);
+        toast("Failed to save changes", { variant: "error" });
       } finally {
         setSavingId(null);
       }

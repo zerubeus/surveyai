@@ -139,13 +139,17 @@ def apply_cleaning_operation(
 
     # Step 6: Create new dataset version via SQL function
     db.update_task_progress(task_id, 75, "Creating dataset version...")
-    result = db.client.rpc(
-        "create_dataset_version",
-        {
-            "p_parent_id": current_dataset["id"],
-            "p_working_file_path": new_storage_path,
-        },
-    ).execute()
+    try:
+        result = db.client.rpc(
+            "create_dataset_version",
+            {
+                "p_parent_id": current_dataset["id"],
+                "p_working_file_path": new_storage_path,
+            },
+        ).execute()
+    except Exception as e:
+        logger.error("create_dataset_version_rpc_failed", error=str(e), parent_id=current_dataset["id"])
+        raise RuntimeError(f"Failed to create dataset version: {e}") from e
 
     new_dataset_id: str | None = result.data
     if isinstance(new_dataset_id, list):

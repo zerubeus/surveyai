@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MoreHorizontal, Trash2 } from "lucide-react";
 import { createBrowserClient } from "@/lib/supabase/browser";
+import { toast } from "@/lib/toast";
 import type { Tables } from "@/lib/types/database";
 
 const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
@@ -90,11 +91,19 @@ export function ProjectCard({ project, onDeleted, qualityScore }: ProjectCardPro
     e.preventDefault();
     e.stopPropagation();
     setIsDeleting(true);
-    await supabase.from("projects").delete().eq("id", project.id);
-    setIsDeleting(false);
-    setShowConfirm(false);
-    onDeleted?.(project.id);
-    router.refresh();
+    try {
+      const { error } = await supabase.from("projects").delete().eq("id", project.id);
+      if (error) throw error;
+      toast("Project deleted", { variant: "success" });
+      onDeleted?.(project.id);
+      router.refresh();
+    } catch (err) {
+      console.error("Failed to delete project:", err);
+      toast("Failed to delete project", { variant: "error" });
+    } finally {
+      setIsDeleting(false);
+      setShowConfirm(false);
+    }
   }
 
   return (

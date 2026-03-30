@@ -43,7 +43,7 @@ export default function AnalysisPage() {
   const [planTaskId, setPlanTaskId] = useState<string | null>(null);
   const [runTaskId, setRunTaskId] = useState<string | null>(null);
 
-  const { dispatchTask, isDispatching } = useDispatchTask();
+  const { dispatchTask, isDispatching, error: dispatchError } = useDispatchTask();
   const planProgress = useTaskProgress(planTaskId);
   const runProgress = useTaskProgress(runTaskId);
 
@@ -145,8 +145,8 @@ export default function AnalysisPage() {
         dataset.id,
       );
       setPlanTaskId(taskId);
-    } catch {
-      // Error handled by useDispatchTask
+    } catch (err) {
+      console.error("Failed to dispatch generate_analysis_plan:", err);
     }
   }, [dataset, projectId, dispatchTask]);
 
@@ -163,8 +163,8 @@ export default function AnalysisPage() {
         dataset.id,
       );
       setRunTaskId(taskId);
-    } catch {
-      // Error handled by useDispatchTask
+    } catch (err) {
+      console.error("Failed to dispatch run_analysis:", err);
     }
   }, [dataset, projectId, dispatchTask]);
 
@@ -300,11 +300,11 @@ export default function AnalysisPage() {
         )}
 
         {/* Plan generation error */}
-        {planProgress.error && (
+        {(planProgress.error || dispatchError) && (
           <Card className="border-red-200 dark:border-red-900">
             <CardContent className="p-4">
               <p className="text-sm text-red-600 dark:text-red-400">
-                {planProgress.error}
+                {planProgress.error || dispatchError}
               </p>
             </CardContent>
           </Card>
