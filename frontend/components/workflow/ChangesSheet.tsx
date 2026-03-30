@@ -250,17 +250,18 @@ export function ChangesSheet({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/50 z-40 transition-opacity"
+        className="fixed inset-0 bg-black/60 z-40 transition-opacity"
         onClick={onClose}
       />
 
-      {/* Sheet */}
+      {/* Sheet — centered, inset from edges, full height with margin */}
       <div
         className={cn(
-          "fixed right-0 top-0 h-full w-[85%] max-w-[1400px] bg-background z-50 shadow-2xl",
+          "fixed inset-y-4 right-4 left-4 md:left-auto md:right-6 md:w-[88vw] md:max-w-[1300px]",
+          "bg-background z-50 shadow-2xl rounded-xl border",
           "transform transition-transform duration-300 ease-out",
           "flex flex-col",
-          isOpen ? "translate-x-0" : "translate-x-full",
+          isOpen ? "translate-x-0 opacity-100" : "translate-x-4 opacity-0",
         )}
       >
         {/* Header */}
