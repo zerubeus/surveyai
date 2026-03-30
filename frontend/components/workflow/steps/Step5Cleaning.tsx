@@ -16,13 +16,17 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
   ArrowLeft,
   ArrowRight,
   Check,
   CheckCircle2,
-  Circle,
   Loader2,
-  Minus,
   RotateCcw,
   X,
 } from "lucide-react";
@@ -44,8 +48,88 @@ export interface Step5CleaningProps {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Helpers                                                            */
+/*  Category config                                                    */
 /* ------------------------------------------------------------------ */
+
+interface CleaningCategory {
+  key: string;
+  stepNum: number;
+  name: string;
+  opTypes: string[];
+  descriptionFilter?: (op: CleaningOperation) => boolean;
+}
+
+const CATEGORIES: CleaningCategory[] = [
+  {
+    key: "cat-1",
+    stepNum: 1,
+    name: "Duplicate Removal",
+    opTypes: ["remove_duplicates"],
+  },
+  {
+    key: "cat-2",
+    stepNum: 2,
+    name: "Response Quality",
+    opTypes: ["custom"],
+    descriptionFilter: (op) =>
+      op.operation_type === "custom" &&
+      op.description.toLowerCase().includes("response_quality"),
+  },
+  {
+    key: "cat-3",
+    stepNum: 3,
+    name: "Standardization",
+    opTypes: ["fix_encoding", "recode_values", "rename_column", "fix_data_type"],
+  },
+  {
+    key: "cat-4",
+    stepNum: 4,
+    name: "Missing Value Treatment",
+    opTypes: ["standardize_missing", "impute_value"],
+  },
+  {
+    key: "cat-5",
+    stepNum: 5,
+    name: "Outlier Treatment",
+    opTypes: ["fix_outlier"],
+  },
+  {
+    key: "cat-6",
+    stepNum: 6,
+    name: "Skip Logic Fixes",
+    opTypes: ["fix_skip_logic"],
+  },
+  {
+    key: "cat-7",
+    stepNum: 7,
+    name: "Custom Operations",
+    opTypes: ["custom"],
+    // Only custom ops NOT already matched by cat-2 (response_quality)
+    descriptionFilter: (op) =>
+      op.operation_type === "custom" &&
+      !op.description.toLowerCase().includes("response_quality"),
+  },
+];
+
+function categorizeOp(op: CleaningOperation): string {
+  // Response quality custom ops
+  if (
+    op.operation_type === "custom" &&
+    op.description.toLowerCase().includes("response_quality")
+  ) {
+    return "cat-2";
+  }
+  // Custom (general)
+  if (op.operation_type === "custom") {
+    return "cat-7";
+  }
+  for (const cat of CATEGORIES) {
+    if (cat.opTypes.includes(op.operation_type) && cat.key !== "cat-2" && cat.key !== "cat-7") {
+      return cat.key;
+    }
+  }
+  return "cat-7"; // fallback
+}
 
 const OP_TYPE_LABELS: Record<string, string> = {
   remove_duplicates: "Remove duplicate rows",
@@ -56,8 +140,11 @@ const OP_TYPE_LABELS: Record<string, string> = {
   recode_values: "Recode values",
   rename_column: "Rename column",
   fix_data_type: "Fix data type",
+  fix_skip_logic: "Fix skip logic",
+  drop_column: "Drop column",
   split_column: "Split column",
   merge_columns: "Merge columns",
+  custom: "Custom operation",
 };
 
 function plainLanguage(op: CleaningOperation): string {
@@ -68,24 +155,6 @@ function plainLanguage(op: CleaningOperation): string {
     if (params?.strategy) return `${base} with ${params.strategy}`;
   }
   return base;
-}
-
-function matchesResearchQuestion(
-  columnName: string | null,
-  researchQuestions: Json,
-): string | null {
-  if (!columnName) return null;
-  const rqs = Array.isArray(researchQuestions)
-    ? (researchQuestions as Array<{ text?: string } | string>)
-    : [];
-  const colLower = columnName.toLowerCase();
-  for (const rq of rqs) {
-    const text = typeof rq === "string" ? rq : rq?.text ?? "";
-    if (text.toLowerCase().includes(colLower)) {
-      return text.length > 80 ? text.slice(0, 80) + "\u2026" : text;
-    }
-  }
-  return null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -105,12 +174,9 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
   const [actioningOpId, setActioningOpId] = useState<string | null>(null);
   const [actionTaskId, setActionTaskId] = useState<string | null>(null);
   const actionProgress = useTaskProgress(actionTaskId);
-
-  /* ---------- Review state ---------- */
-  const [currentIndex, setCurrentIndex] = useState(0);
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const [applyAllRunning, setApplyAllRunning] = useState(false);
 
-  /* ---------- Reset action tracking on complete ---------- */
   useEffect(() => {
     if (
       actionProgress.status === "completed" ||
@@ -126,33 +192,30 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
     }
   }, [actionProgress.status]);
 
-  /* ---------- Keyboard navigation ---------- */
-  useEffect(() => {
-    if (cleaning.all.length === 0) return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
-      )
-        return;
-      if (e.key === "ArrowRight") {
-        setCurrentIndex((i) => Math.min(i + 1, cleaning.all.length - 1));
-      } else if (e.key === "ArrowLeft") {
-        setCurrentIndex((i) => Math.max(i - 1, 0));
-      }
+  /* ---------- Computed: ops by category ---------- */
+  const opsByCategory = useMemo(() => {
+    const map: Record<string, CleaningOperation[]> = {};
+    for (const cat of CATEGORIES) {
+      map[cat.key] = [];
     }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [cleaning.all.length]);
+    for (const op of cleaning.all) {
+      const catKey = categorizeOp(op);
+      if (!map[catKey]) map[catKey] = [];
+      map[catKey].push(op);
+    }
+    return map;
+  }, [cleaning.all]);
 
-  /* ---------- Computed ---------- */
-  const pendingOps = useMemo(
-    () => cleaning.all.filter((op) => op.status === "pending" || op.status === "approved"),
+  const totalApplied = useMemo(
+    () => cleaning.all.filter((o) => o.status === "applied").length,
     [cleaning.all],
   );
-
-  const appliedOps = useMemo(
-    () => cleaning.all.filter((op) => op.status === "applied"),
+  const totalPending = useMemo(
+    () => cleaning.all.filter((o) => o.status === "pending" || o.status === "approved").length,
+    [cleaning.all],
+  );
+  const totalRejected = useMemo(
+    () => cleaning.all.filter((o) => o.status === "rejected").length,
     [cleaning.all],
   );
 
@@ -174,14 +237,12 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
           datasetId,
         );
         setActionTaskId(taskId);
-        // advance to next pending op
-        setCurrentIndex((i) => Math.min(i + 1, cleaning.all.length - 1));
       } catch {
         toast("Failed to apply operation", { variant: "error" });
         setActioningOpId(null);
       }
     },
-    [projectId, datasetId, dispatchTask, supabase, cleaning.all.length],
+    [projectId, datasetId, dispatchTask, supabase],
   );
 
   const handleSkip = useCallback(
@@ -191,9 +252,8 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
         // @ts-ignore
         .update({ status: "rejected" as Enums<"cleaning_op_status"> })
         .eq("id", op.id);
-      setCurrentIndex((i) => Math.min(i + 1, cleaning.all.length - 1));
     },
-    [supabase, cleaning.all.length],
+    [supabase],
   );
 
   const handleRollback = useCallback(
@@ -214,6 +274,34 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
     },
     [supabase],
   );
+
+  const handleApplyAllPending = useCallback(async () => {
+    if (!datasetId) return;
+    setApplyAllRunning(true);
+    const pendingOps = cleaning.all.filter(
+      (o) => o.status === "pending" || o.status === "approved",
+    );
+    try {
+      for (const op of pendingOps) {
+        await supabase
+          .from("cleaning_operations")
+          // @ts-ignore
+          .update({ status: "approved" as Enums<"cleaning_op_status"> })
+          .eq("id", op.id);
+        await dispatchTask(
+          projectId,
+          "apply_cleaning_operation",
+          { operation_id: op.id, dataset_id: datasetId },
+          datasetId,
+        );
+      }
+      toast(`Applied ${pendingOps.length} operations`, { variant: "success" });
+    } catch {
+      toast("Some operations failed to apply", { variant: "error" });
+    } finally {
+      setApplyAllRunning(false);
+    }
+  }, [cleaning.all, datasetId, projectId, dispatchTask, supabase]);
 
   const handleFinalize = useCallback(async () => {
     setIsFinalizing(true);
@@ -262,12 +350,12 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
       <div className="space-y-6">
         <div>
           <h2 className="text-2xl font-bold">Data Cleaning</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Loading cleaning operations…</p>
+          <p className="mt-1 text-sm text-muted-foreground">Loading cleaning operations...</p>
         </div>
         <Card>
           <CardContent className="flex items-center gap-3 py-8">
             <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-            <span className="text-sm text-muted-foreground">Loading…</span>
+            <span className="text-sm text-muted-foreground">Loading...</span>
           </CardContent>
         </Card>
       </div>
@@ -291,7 +379,7 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
             <CheckCircle2 className="mb-4 h-12 w-12 text-muted-foreground/50" />
             <p className="mb-2 text-sm font-medium">No cleaning operations</p>
             <p className="mb-6 text-sm text-muted-foreground text-center max-w-sm">
-              Cleaning suggestions are generated during the Quality Assessment step. 
+              Cleaning suggestions are generated during the Quality Assessment step.
               Go back to review quality issues and apply fixes there.
             </p>
             <Button variant="outline" onClick={() => router.push(`/projects/${projectId}/step/4`)}>
@@ -303,7 +391,7 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
         <div className="flex justify-end border-t pt-4">
           <Button onClick={handleFinalize} disabled={isFinalizing}>
             {isFinalizing ? (
-              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Finalizing…</>
+              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Finalizing...</>
             ) : (
               <>Continue to Analysis <ArrowRight className="ml-2 h-4 w-4" /></>
             )}
@@ -314,22 +402,8 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
   }
 
   /* ================================================================ */
-  /*  Main: guided review + applied ops                               */
+  /*  Main: 7-category cleaning audit view                            */
   /* ================================================================ */
-  const total = cleaning.all.length;
-  const safeIndex = Math.min(currentIndex, total - 1);
-  const currentOp = cleaning.all[safeIndex];
-  const progressPct = total > 0 ? ((safeIndex + 1) / total) * 100 : 0;
-
-  const rqMatch = currentOp
-    ? matchesResearchQuestion(currentOp.column_name, project.research_questions)
-    : null;
-
-  const beforeData = currentOp?.before_snapshot as Record<string, Json>[] | null;
-  const afterData = currentOp?.after_snapshot as Record<string, Json>[] | null;
-  const hasSample = beforeData && Array.isArray(beforeData) && beforeData.length > 0;
-
-  const isCurrentActioning = currentOp ? actioningOpId === currentOp.id : false;
 
   return (
     <div className="space-y-6">
@@ -338,252 +412,156 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
         <div>
           <h2 className="text-2xl font-bold">Data Cleaning</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Review each cleaning operation. Applied operations can be rolled back.
+            Review and manage cleaning operations by category.
           </p>
         </div>
-        <div className="flex items-center gap-2 text-sm">
-          {appliedOps.length > 0 && (
-            <Badge className="bg-green-600">{appliedOps.length} applied</Badge>
-          )}
-          {pendingOps.length > 0 && (
-            <Badge variant="outline">{pendingOps.length} pending</Badge>
-          )}
-        </div>
       </div>
 
-      {/* Two-column layout */}
-      <div className="flex flex-col lg:flex-row gap-4">
-
-        {/* ======================================================== */}
-        {/*  Main card (left)                                         */}
-        {/* ======================================================== */}
-        <div className="flex-1 min-w-0">
-          {currentOp ? (
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between text-sm text-muted-foreground">
-                  <span>Operation {safeIndex + 1} of {total}</span>
-                  <StatusBadge status={currentOp.status} />
-                </div>
-                <Progress value={progressPct} className="h-1.5 mt-2" />
-              </CardHeader>
-
-              <CardContent className="space-y-5">
-                {/* Title + column */}
-                <div>
-                  <CardTitle className="text-base">{plainLanguage(currentOp)}</CardTitle>
-                  {currentOp.column_name && (
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Affected column:{" "}
-                      <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
-                        {currentOp.column_name}
-                      </code>
-                    </p>
-                  )}
-                </div>
-
-                {/* Why this matters */}
-                <div className="rounded-lg bg-muted/50 p-3 space-y-1">
-                  <p className="text-xs font-semibold text-muted-foreground">Why this matters</p>
-                  {rqMatch ? (
-                    <p className="text-sm">
-                      This column appears in your research question:{" "}
-                      <span className="italic">&ldquo;{rqMatch}&rdquo;</span>
-                    </p>
-                  ) : (
-                    <p className="text-sm">{currentOp.reasoning || currentOp.description}</p>
-                  )}
-                </div>
-
-                {/* Description */}
-                {currentOp.description && (
-                  <p className="text-sm text-muted-foreground">{currentOp.description}</p>
-                )}
-
-                {/* Before → After preview */}
-                {hasSample && (
-                  <BeforeAfterPreview before={beforeData} after={afterData} />
-                )}
-
-                {/* Apply progress */}
-                {isCurrentActioning && (
-                  <div className="space-y-1">
-                    <Progress value={actionProgress.progress} className="h-2" />
-                    <p className="text-xs text-muted-foreground">Processing…</p>
-                  </div>
-                )}
-
-                {/* Keyboard hint */}
-                <p className="text-xs text-muted-foreground text-center">
-                  <kbd className="rounded border bg-muted px-1.5 py-0.5 text-xs font-mono">&larr;</kbd>{" "}
-                  Previous &middot;{" "}
-                  <kbd className="rounded border bg-muted px-1.5 py-0.5 text-xs font-mono">&rarr;</kbd>{" "}
-                  Next
-                </p>
-
-                {/* Action buttons */}
-                <div className="flex items-center justify-between border-t pt-4">
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentIndex((i) => Math.max(i - 1, 0))}
-                      disabled={safeIndex === 0}
-                    >
-                      <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
-                      Previous
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentIndex((i) => Math.min(i + 1, total - 1))}
-                      disabled={safeIndex >= total - 1}
-                    >
-                      Next
-                      <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-
-                  <div className="flex gap-2">
-                    {currentOp.status === "applied" ? (
-                      /* Applied op → rollback button */
-                      <Button
-                        variant="outline"
-                        onClick={() => handleRollback(currentOp)}
-                        disabled={isCurrentActioning}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        {isCurrentActioning ? (
-                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                        )}
-                        Roll back
-                      </Button>
-                    ) : currentOp.status === "pending" || currentOp.status === "approved" ? (
-                      /* Pending op → skip / apply */
-                      <>
-                        <Button
-                          variant="outline"
-                          onClick={() => handleSkip(currentOp)}
-                          disabled={isCurrentActioning}
-                        >
-                          <X className="mr-1.5 h-3.5 w-3.5" />
-                          Skip
-                        </Button>
-                        <Button
-                          onClick={() => handleApply(currentOp)}
-                          disabled={isCurrentActioning}
-                        >
-                          {isCurrentActioning ? (
-                            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Check className="mr-1.5 h-3.5 w-3.5" />
-                          )}
-                          Apply
-                        </Button>
-                      </>
-                    ) : (
-                      /* Rejected / undone — info only */
-                      <Badge variant="outline" className="text-muted-foreground">
-                        {currentOp.status === "rejected" ? "Skipped" : "Rolled back"}
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="border-green-200 dark:border-green-900 bg-green-50/50">
-              <CardContent className="flex flex-col items-center py-8">
-                <CheckCircle2 className="mb-3 h-8 w-8 text-green-500" />
-                <p className="font-medium">All operations reviewed!</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {appliedOps.length} applied · {cleaning.rejected.length} skipped
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {/* ======================================================== */}
-        {/*  Sidebar (right)                                          */}
-        {/* ======================================================== */}
-        <div className="w-full lg:w-64 flex-shrink-0">
-          <Card className="sticky top-4">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">All operations</CardTitle>
-            </CardHeader>
-            <CardContent className="max-h-[60vh] overflow-y-auto p-0">
-              <div className="space-y-0.5 px-3 pb-3">
-                {cleaning.all.map((op, idx) => {
-                  const isCurrent = idx === safeIndex;
-                  return (
-                    <button
-                      key={op.id}
-                      onClick={() => setCurrentIndex(idx)}
-                      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
-                        isCurrent
-                          ? "bg-primary/10 text-primary font-medium"
-                          : "hover:bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      <SidebarStatusIcon status={op.status} isCurrent={isCurrent} />
-                      <span className="truncate">{op.description || plainLanguage(op)}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* Applied ops summary */}
-      {appliedOps.length > 0 && (
-        <Card className="border-green-200 dark:border-green-900">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-green-700 dark:text-green-400">
-              Applied operations ({appliedOps.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1.5">
-            {appliedOps.map((op) => (
-              <div
-                key={op.id}
-                className="flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2 text-sm"
+      {/* Summary stats bar */}
+      <Card>
+        <CardContent className="flex flex-wrap items-center gap-4 p-4">
+          <div className="flex items-center gap-2 text-sm">
+            <Badge className="bg-green-600 text-white">{totalApplied} applied</Badge>
+            <Badge variant="outline">{totalPending} pending review</Badge>
+            <Badge variant="secondary">{totalRejected} skipped</Badge>
+          </div>
+          <div className="ml-auto">
+            {totalPending > 0 && (
+              <Button
+                size="sm"
+                onClick={handleApplyAllPending}
+                disabled={applyAllRunning}
               >
-                <div className="flex items-center gap-2">
-                  <Check className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
-                  <span className="truncate">{op.description || plainLanguage(op)}</span>
-                  {op.column_name && (
-                    <code className="text-xs text-muted-foreground font-mono">{op.column_name}</code>
-                  )}
-                </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-muted-foreground hover:text-destructive flex-shrink-0"
-                  onClick={() => handleRollback(op)}
-                  disabled={actioningOpId === op.id}
-                >
-                  {actioningOpId === op.id ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <RotateCcw className="h-3.5 w-3.5" />
-                  )}
-                </Button>
-              </div>
-            ))}
+                {applyAllRunning && (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                )}
+                Apply All Pending ({totalPending})
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Action progress bar */}
+      {actioningOpId && (
+        <Card>
+          <CardContent className="p-4 space-y-1">
+            <Progress value={actionProgress.progress} className="h-2" />
+            <p className="text-xs text-muted-foreground">Processing operation...</p>
           </CardContent>
         </Card>
       )}
+
+      {/* 7-category accordion */}
+      <Accordion type="multiple" className="space-y-2">
+        {CATEGORIES.map((cat) => {
+          const ops = opsByCategory[cat.key] ?? [];
+          const appliedOps = ops.filter((o) => o.status === "applied");
+          const pendingOps = ops.filter((o) => o.status === "pending" || o.status === "approved");
+          const otherOps = ops.filter(
+            (o) => o.status !== "applied" && o.status !== "pending" && o.status !== "approved",
+          );
+
+          return (
+            <AccordionItem
+              key={cat.key}
+              value={cat.key}
+              className="rounded-lg border"
+            >
+              <AccordionTrigger className="px-4 hover:no-underline">
+                <div className="flex flex-1 items-center gap-3 text-left">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                    {cat.stepNum}
+                  </span>
+                  <span className="text-sm font-medium">{cat.name}</span>
+                  {ops.length > 0 ? (
+                    <div className="flex items-center gap-1.5">
+                      {appliedOps.length > 0 && (
+                        <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs">
+                          {appliedOps.length} applied
+                        </Badge>
+                      )}
+                      {pendingOps.length > 0 && (
+                        <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs">
+                          {pendingOps.length} pending
+                        </Badge>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      No operations
+                    </span>
+                  )}
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-4 pb-4">
+                {ops.length === 0 && (
+                  <p className="py-4 text-center text-sm text-muted-foreground">
+                    No cleaning operations in this category.
+                  </p>
+                )}
+
+                {/* Applied operations */}
+                {appliedOps.length > 0 && (
+                  <div className="space-y-2 mb-4">
+                    <p className="text-xs font-semibold text-green-700 dark:text-green-400">
+                      Applied ({appliedOps.length})
+                    </p>
+                    {appliedOps.map((op) => (
+                      <OpCard
+                        key={op.id}
+                        op={op}
+                        actioningOpId={actioningOpId}
+                        onRollback={handleRollback}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* Pending operations */}
+                {pendingOps.length > 0 && (
+                  <div className="space-y-2 mb-4">
+                    <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">
+                      Pending Review ({pendingOps.length})
+                    </p>
+                    {pendingOps.map((op) => (
+                      <OpCard
+                        key={op.id}
+                        op={op}
+                        actioningOpId={actioningOpId}
+                        onApply={handleApply}
+                        onSkip={handleSkip}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* Rejected/undone operations */}
+                {otherOps.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      Skipped / Rolled Back ({otherOps.length})
+                    </p>
+                    {otherOps.map((op) => (
+                      <OpCard
+                        key={op.id}
+                        op={op}
+                        actioningOpId={actioningOpId}
+                      />
+                    ))}
+                  </div>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+          );
+        })}
+      </Accordion>
 
       {/* Finalize */}
       <div className="flex justify-end border-t pt-4">
         <Button onClick={handleFinalize} disabled={isFinalizing}>
           {isFinalizing ? (
-            <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Finalizing…</>
+            <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Finalizing...</>
           ) : (
             <>Finalize &amp; Continue to Analysis <ArrowRight className="ml-2 h-4 w-4" /></>
           )}
@@ -607,16 +585,96 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs">pending</Badge>;
 }
 
-function SidebarStatusIcon({ status, isCurrent }: { status: string; isCurrent: boolean }) {
-  if (status === "applied")
-    return <Check className="h-3.5 w-3.5 flex-shrink-0 text-green-500" />;
-  if (status === "rejected")
-    return <Minus className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />;
-  if (status === "undone")
-    return <RotateCcw className="h-3.5 w-3.5 flex-shrink-0 text-orange-500" />;
-  if (isCurrent)
-    return <div className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center"><div className="h-2 w-2 rounded-full bg-primary" /></div>;
-  return <Circle className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/50" />;
+function OpCard({
+  op,
+  actioningOpId,
+  onApply,
+  onSkip,
+  onRollback,
+}: {
+  op: CleaningOperation;
+  actioningOpId: string | null;
+  onApply?: (op: CleaningOperation) => void;
+  onSkip?: (op: CleaningOperation) => void;
+  onRollback?: (op: CleaningOperation) => void;
+}) {
+  const isActioning = actioningOpId === op.id;
+  const beforeData = op.before_snapshot as Record<string, Json>[] | null;
+  const afterData = op.after_snapshot as Record<string, Json>[] | null;
+  const hasSample =
+    beforeData && Array.isArray(beforeData) && beforeData.length > 0;
+
+  return (
+    <div className="rounded-lg border p-3 space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <StatusBadge status={op.status} />
+          <span className="text-sm font-medium">
+            {op.description || plainLanguage(op)}
+          </span>
+        </div>
+        {op.column_name && (
+          <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono text-muted-foreground">
+            {op.column_name}
+          </code>
+        )}
+      </div>
+
+      {op.reasoning && (
+        <p className="text-xs text-muted-foreground">{op.reasoning}</p>
+      )}
+
+      {/* Before/after sample */}
+      {hasSample && (
+        <BeforeAfterPreview before={beforeData} after={afterData} />
+      )}
+
+      {/* Action buttons */}
+      <div className="flex gap-2 pt-1">
+        {op.status === "applied" && onRollback && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-destructive hover:text-destructive"
+            onClick={() => onRollback(op)}
+            disabled={isActioning}
+          >
+            {isActioning ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            Rollback
+          </Button>
+        )}
+        {(op.status === "pending" || op.status === "approved") && onSkip && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onSkip(op)}
+            disabled={isActioning}
+          >
+            <X className="mr-1.5 h-3.5 w-3.5" />
+            Skip
+          </Button>
+        )}
+        {(op.status === "pending" || op.status === "approved") && onApply && (
+          <Button
+            size="sm"
+            onClick={() => onApply(op)}
+            disabled={isActioning}
+          >
+            {isActioning ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Check className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            Apply
+          </Button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function BeforeAfterPreview({
@@ -633,19 +691,33 @@ function BeforeAfterPreview({
 
   return (
     <div>
-      <p className="mb-2 text-xs font-semibold text-muted-foreground">Before &rarr; After</p>
+      <p className="mb-2 text-xs font-semibold text-muted-foreground">
+        Before &rarr; After
+      </p>
       <div className="overflow-x-auto rounded border">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b bg-muted/50">
               {cols.map((col) => (
-                <th key={`before-${col}`} className="px-2 py-1 text-left font-mono font-medium">{col}</th>
+                <th
+                  key={`before-${col}`}
+                  className="px-2 py-1 text-left font-mono font-medium"
+                >
+                  {col}
+                </th>
               ))}
               {afterRows.length > 0 && (
                 <>
-                  <th className="px-1 text-center text-muted-foreground">&rarr;</th>
+                  <th className="px-1 text-center text-muted-foreground">
+                    &rarr;
+                  </th>
                   {cols.map((col) => (
-                    <th key={`after-${col}`} className="px-2 py-1 text-left font-mono font-medium text-green-700 dark:text-green-400">{col}</th>
+                    <th
+                      key={`after-${col}`}
+                      className="px-2 py-1 text-left font-mono font-medium text-green-700 dark:text-green-400"
+                    >
+                      {col}
+                    </th>
                   ))}
                 </>
               )}
@@ -657,13 +729,20 @@ function BeforeAfterPreview({
               return (
                 <tr key={i} className="border-b last:border-0">
                   {cols.map((col) => (
-                    <td key={`b-${col}`} className="px-2 py-1 font-mono">{String(row[col] ?? "")}</td>
+                    <td key={`b-${col}`} className="px-2 py-1 font-mono">
+                      {String(row[col] ?? "")}
+                    </td>
                   ))}
                   {afterRows.length > 0 && (
                     <>
-                      <td className="px-1 text-center text-muted-foreground">&rarr;</td>
+                      <td className="px-1 text-center text-muted-foreground">
+                        &rarr;
+                      </td>
                       {cols.map((col) => (
-                        <td key={`a-${col}`} className="px-2 py-1 font-mono text-green-700 dark:text-green-400">
+                        <td
+                          key={`a-${col}`}
+                          className="px-2 py-1 font-mono text-green-700 dark:text-green-400"
+                        >
                           {afterRow ? String(afterRow[col] ?? "") : ""}
                         </td>
                       ))}
