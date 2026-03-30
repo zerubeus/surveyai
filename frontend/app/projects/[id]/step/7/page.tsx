@@ -30,10 +30,9 @@ export default async function Step7Page({
     .maybeSingle();
   const dataset = datasetRaw as Tables<"datasets"> | null;
 
-  // Fetch analysis plans, results, charts, and column mappings in parallel
   const datasetId = dataset?.id;
 
-  const [plansRes, resultsRes, chartsRes, mappingsRes] = await Promise.all([
+  const [plansRes, resultsRes, chartsRes, mappingsRes, edaRes] = await Promise.all([
     datasetId
       ? supabase
           .from("analysis_plans")
@@ -55,9 +54,19 @@ export default async function Step7Page({
     datasetId
       ? supabase
           .from("column_mappings")
-          .select("column_name")
+          .select("column_name, role, data_type")
           .eq("dataset_id", datasetId)
-      : Promise.resolve({ data: [] as { column_name: string }[] }),
+          .not("role", "eq", "identifier")
+      : Promise.resolve({ data: [] as { column_name: string; role: string | null; data_type: string | null }[] }),
+    // Fetch EDA results — this has all frequency tables and stats we need for charts
+    datasetId
+      ? supabase
+          .from("eda_results")
+          .select("*")
+          .eq("dataset_id", datasetId)
+          .eq("result_type", "column_profile")
+          .order("column_name", { ascending: true })
+      : Promise.resolve({ data: [] as Tables<"eda_results">[] }),
   ]);
 
   const plans = (plansRes.data ?? []) as Tables<"analysis_plans">[];
@@ -66,6 +75,7 @@ export default async function Step7Page({
   const columns = (mappingsRes.data ?? []).map(
     (m: { column_name: string }) => m.column_name,
   );
+  const edaResults = (edaRes.data ?? []) as Tables<"eda_results">[];
 
   // Build signed URLs for charts
   const chartUrls: Record<string, string> = {};
@@ -89,6 +99,7 @@ export default async function Step7Page({
       charts={charts}
       chartUrls={chartUrls}
       columns={columns}
+      edaResults={edaResults}
     />
   );
 }
