@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
-import { ProjectContextForm } from "@/components/projects/ProjectContextForm";
+import { NewProjectFlow } from "@/components/projects/NewProjectFlow";
 
 export default async function NewProjectPage() {
   const supabase = await createServerClient();
@@ -44,28 +44,8 @@ export default async function NewProjectPage() {
       );
     }
 
-    return (
-      <div className="container max-w-3xl py-10">
-        <h1 className="text-3xl font-bold">New Project</h1>
-        <p className="mt-1 text-muted-foreground">
-          Define the context for your survey analysis
-        </p>
-        <div className="mt-8">
-          <ProjectContextForm organizationId={org as string} />
-        </div>
-      </div>
-    );
+    return <NewProjectFlow organizationId={org as string} />;
   }
 
-  return (
-    <div className="container max-w-3xl py-10">
-      <h1 className="text-3xl font-bold">New Project</h1>
-      <p className="mt-1 text-muted-foreground">
-        Define the context for your survey analysis
-      </p>
-      <div className="mt-8">
-        <ProjectContextForm organizationId={membership.organization_id} />
-      </div>
-    </div>
-  );
+  return <NewProjectFlow organizationId={membership.organization_id} />;
 }

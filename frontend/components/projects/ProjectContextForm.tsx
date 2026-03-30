@@ -39,11 +39,35 @@ const emptyForm: ProjectFormData = {
 
 interface ProjectContextFormProps {
   organizationId: string;
+  /** Pre-fill form with AI-suggested values */
+  initialValues?: Partial<ProjectFormData>;
+  /** Fields that were auto-filled by AI — shows an "AI" badge next to label */
+  aiFilledFields?: string[];
 }
 
-export function ProjectContextForm({ organizationId }: ProjectContextFormProps) {
+function AiBadge() {
+  return (
+    <span className="ml-1.5 inline-flex items-center rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-none text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+      AI
+    </span>
+  );
+}
+
+export function ProjectContextForm({ organizationId, initialValues, aiFilledFields }: ProjectContextFormProps) {
   const router = useRouter();
-  const [form, setForm] = useState<ProjectFormData>(emptyForm);
+
+  const initialForm: ProjectFormData = initialValues
+    ? {
+        ...emptyForm,
+        ...initialValues,
+        geographic_scope: {
+          ...emptyForm.geographic_scope,
+          ...(initialValues.geographic_scope ?? {}),
+        },
+      }
+    : emptyForm;
+
+  const [form, setForm] = useState<ProjectFormData>(initialForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -189,7 +213,10 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="name">Project Name</Label>
+            <Label htmlFor="name">
+              Project Name
+              {aiFilledFields?.includes("name") && <AiBadge />}
+            </Label>
             <Input
               data-tour="project-name"
               id="name"
@@ -203,7 +230,10 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="objective_text">Objective</Label>
+            <Label htmlFor="objective_text">
+              Objective
+              {aiFilledFields?.includes("objective_text") && <AiBadge />}
+            </Label>
             <Textarea
               id="objective_text"
               value={form.objective_text}
@@ -217,7 +247,10 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
           </div>
 
           <div className="space-y-2">
-            <Label>Objective Tags</Label>
+            <Label>
+              Objective Tags
+              {aiFilledFields?.includes("objective_tags") && <AiBadge />}
+            </Label>
             <div className="flex flex-wrap gap-2">
               {OBJECTIVE_TAGS.map((tag) => (
                 <button
@@ -244,7 +277,10 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
       {/* Research Questions */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg" data-tour="research-questions">Research Questions</CardTitle>
+          <CardTitle className="text-lg" data-tour="research-questions">
+            Research Questions
+            {aiFilledFields?.includes("research_questions") && <AiBadge />}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* RQ templates — shown when at least one objective tag matches */}
@@ -321,7 +357,10 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="target_population">Target Population</Label>
+            <Label htmlFor="target_population">
+              Target Population
+              {aiFilledFields?.includes("target_population") && <AiBadge />}
+            </Label>
             <Textarea
               id="target_population"
               value={form.target_population}
@@ -337,7 +376,10 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="sampling_method">Sampling Method</Label>
+            <Label htmlFor="sampling_method">
+              Sampling Method
+              {aiFilledFields?.includes("sampling_method") && <AiBadge />}
+            </Label>
             <select
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none"
               id="sampling_method"
@@ -358,7 +400,10 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="country">Country</Label>
+            <Label htmlFor="country">
+              Country
+              {aiFilledFields?.includes("geographic_scope.country") && <AiBadge />}
+            </Label>
             <Input
               id="country"
               value={form.geographic_scope.country}
@@ -373,7 +418,10 @@ export function ProjectContextForm({ organizationId }: ProjectContextFormProps) 
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="regions">Regions (optional)</Label>
+            <Label htmlFor="regions">
+              Regions (optional)
+              {aiFilledFields?.includes("geographic_scope.regions") && <AiBadge />}
+            </Label>
             <Input
               id="regions"
               value={form.geographic_scope.regions ?? ""}
