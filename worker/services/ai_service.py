@@ -34,7 +34,9 @@ def _get_client() -> tuple[genai.Client, str]:
     """
     global _client
     api_key = os.environ["GEMINI_API_KEY"]
-    model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    model_name = os.getenv("GEMINI_MODEL")
+    if not model_name:
+        raise ValueError("GEMINI_MODEL environment variable is not set")
     if _client is None:
         _client = genai.Client(api_key=api_key)
     return _client, model_name
