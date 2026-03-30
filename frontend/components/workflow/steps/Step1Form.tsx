@@ -214,7 +214,9 @@ export function Step1Form({ project }: Step1FormProps) {
     return [""];
   });
   const [audience, setAudience] = useState<AudienceValue | "">(
-    parseAudience(project.additional_context)
+    parseAudience(project.additional_context) ||
+    (aiPrefill?.audience as AudienceValue) ||
+    ""
   );
 
   // -- auto-save hooks --
@@ -410,7 +412,12 @@ export function Step1Form({ project }: Step1FormProps) {
             </div>
 
             <div className="space-y-2">
-              <Label>Objective Tags</Label>
+              <Label className="flex items-center gap-1.5">
+                Objective Tags
+                {isAiField("objective_tags") && (
+                  <span className="rounded bg-blue-100 px-1 py-0.5 text-[10px] font-medium text-blue-600 dark:bg-blue-900 dark:text-blue-300">✦ AI</span>
+                )}
+              </Label>
               <div className="flex flex-wrap gap-2">
                 {OBJECTIVE_TAGS.map((tag) => (
                   <button
@@ -439,8 +446,11 @@ export function Step1Form({ project }: Step1FormProps) {
           </AccordionTrigger>
           <AccordionContent className="space-y-4 pb-6">
             <div className="space-y-2">
-              <Label>
+              <Label className="flex items-center gap-1.5">
                 Sampling Method <span className="text-red-500">*</span>
+                {isAiField("sampling_method") && (
+                  <span className="rounded bg-blue-100 px-1 py-0.5 text-[10px] font-medium text-blue-600 dark:bg-blue-900 dark:text-blue-300">✦ AI</span>
+                )}
               </Label>
               <Select
                 value={samplingMethod}
@@ -465,7 +475,12 @@ export function Step1Form({ project }: Step1FormProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="target-pop">Target Population</Label>
+              <Label htmlFor="target-pop" className="flex items-center gap-1.5">
+                Target Population
+                {isAiField("target_population") && (
+                  <span className="rounded bg-blue-100 px-1 py-0.5 text-[10px] font-medium text-blue-600 dark:bg-blue-900 dark:text-blue-300">✦ AI</span>
+                )}
+              </Label>
               <Textarea
                 id="target-pop"
                 value={targetPopulation}
@@ -477,7 +492,12 @@ export function Step1Form({ project }: Step1FormProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="country">Geographic Scope</Label>
+              <Label htmlFor="country" className="flex items-center gap-1.5">
+                Geographic Scope
+                {(isAiField("country") || isAiField("regions")) && (
+                  <span className="rounded bg-blue-100 px-1 py-0.5 text-[10px] font-medium text-blue-600 dark:bg-blue-900 dark:text-blue-300">✦ AI</span>
+                )}
+              </Label>
               <Input
                 id="country"
                 value={geoScope.country}
@@ -587,7 +607,12 @@ export function Step1Form({ project }: Step1FormProps) {
 
       {/* ===== Report Audience ===== */}
       <div className="space-y-3">
-        <Label className="text-base font-semibold">Report Audience</Label>
+        <Label className="flex items-center gap-2 text-base font-semibold">
+          Report Audience
+          {isAiField("audience") && (
+            <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 dark:bg-blue-900 dark:text-blue-300">✦ AI</span>
+          )}
+        </Label>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           {AUDIENCE_OPTIONS.map((opt) => {
             const Icon = opt.icon;

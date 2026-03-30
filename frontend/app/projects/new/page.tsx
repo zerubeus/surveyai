@@ -34,6 +34,7 @@ interface AIPrefill {
   sampling_method: string;
   country: string;
   regions: string;
+  audience: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -197,9 +198,10 @@ export default function NewProjectPage() {
         objective_tags: [],
         research_questions: [{ text: "", priority: 1 }],
         target_population: "",
-        sampling_method: "simple_random",
+        sampling_method: "cluster",
         country: "",
         regions: "",
+        audience: "donor",
       };
 
       if (res.ok) {
@@ -246,6 +248,8 @@ export default function NewProjectPage() {
                 return v !== "" && !(Array.isArray(v) && v.length === 0);
               }
             ),
+            // Persist audience for Step1Form auto-save read
+            audience: suggestions.audience || null,
           }),
           current_step: 1,
           // Step 2 (Upload) is done at project creation — mark completed immediately
