@@ -19,6 +19,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -52,6 +58,10 @@ type Project = Tables<"projects">;
 type Dataset = Tables<"datasets">;
 type AnalysisPlan = Tables<"analysis_plans">;
 type PipelineStatus = Record<string, string>;
+type EDAResult = Pick<
+  Tables<"eda_results">,
+  "id" | "column_name" | "column_role" | "data_type" | "profile" | "quality_score"
+>;
 
 interface Step5AnalysisProps {
   project: Project;
@@ -59,6 +69,7 @@ interface Step5AnalysisProps {
   hasWeightColumn: boolean;
   weightColumnName: string | null;
   initialRunningTaskIds: Record<string, string>;
+  edaResults?: EDAResult[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -132,6 +143,7 @@ export function Step5Analysis({
   hasWeightColumn,
   weightColumnName,
   initialRunningTaskIds,
+  edaResults = [],
 }: Step5AnalysisProps) {
   const router = useRouter();
   const supabase = createBrowserClient();
@@ -159,6 +171,7 @@ export function Step5Analysis({
   const [showAutoApproveConfirm, setShowAutoApproveConfirm] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [updatingPlanIds, setUpdatingPlanIds] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState("statistical");
   const [showCustomTestForm, setShowCustomTestForm] = useState(false);
   const [customTestForm, setCustomTestForm] = useState({
     rqText: "",
@@ -647,320 +660,349 @@ export function Step5Analysis({
         weightColumnName={weightColumnName}
       />
 
-      {/* Top action bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-4">
-          <h2 className="text-lg font-semibold">
-            Analysis Plan
-          </h2>
-          <span className="text-sm text-muted-foreground">
-            {approvedCount} of {plans.length} approved or completed
-          </span>
-        </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="descriptive">Descriptive</TabsTrigger>
+          <TabsTrigger value="statistical">Statistical Tests</TabsTrigger>
+          <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>
+        </TabsList>
 
-        <div className="flex items-center gap-2">
-          <button
-            className="text-sm text-muted-foreground underline-offset-2 hover:underline"
-            onClick={handleRegenerate}
-            disabled={isDispatching || isFinalizing}
-          >
-            <RefreshCw className="mr-1 inline h-3 w-3" />
-            Re-generate plan
-          </button>
+        {/* ============================================================ */}
+        {/*  TAB: Descriptive Analysis                                    */}
+        {/* ============================================================ */}
+        <TabsContent value="descriptive">
+          <DescriptiveTab edaResults={edaResults} />
+        </TabsContent>
 
-          {pendingCount > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowAutoApproveConfirm(true)}
-            >
-              <CheckCircle2 className="mr-1.5 h-4 w-4" />
-              Auto-approve all
-            </Button>
-          )}
+        {/* ============================================================ */}
+        {/*  TAB: Statistical Tests (existing content)                    */}
+        {/* ============================================================ */}
+        <TabsContent value="statistical">
+          <div className="space-y-6 pt-2">
+            {/* Top action bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-4">
+                <h2 className="text-lg font-semibold">
+                  Analysis Plan
+                </h2>
+                <span className="text-sm text-muted-foreground">
+                  {approvedCount} of {plans.length} approved or completed
+                </span>
+              </div>
 
-          <Button
-            size="sm"
-            disabled={!canRunAnalysis || isFinalizing}
-            onClick={handleRunAnalysis}
-          >
-            {isFinalizing ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <ArrowRight className="mr-2 h-4 w-4" />
-            )}
-            Run Analysis ({approvedCount})
-          </Button>
-        </div>
-        {!canRunAnalysis && plans.length > 0 && (
-          <p className="mt-2 text-xs text-muted-foreground text-right">
-            Approve at least one research question above to enable analysis
-          </p>
-        )}
-      </div>
+              <div className="flex items-center gap-2">
+                <button
+                  className="text-sm text-muted-foreground underline-offset-2 hover:underline"
+                  onClick={handleRegenerate}
+                  disabled={isDispatching || isFinalizing}
+                >
+                  <RefreshCw className="mr-1 inline h-3 w-3" />
+                  Re-generate plan
+                </button>
 
-      {/* Auto-approve confirmation dialog */}
-      {showAutoApproveConfirm && (
-        <Card className="border-blue-200 bg-blue-50">
-          <CardContent className="flex items-center justify-between p-4">
-            <p className="text-sm">
-              Approve all <strong>{pendingCount}</strong> proposed analyses?
-            </p>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowAutoApproveConfirm(false)}
-              >
-                Cancel
-              </Button>
-              <Button size="sm" onClick={handleAutoApproveAll}>
-                Approve All
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Generating overlay (re-generating with existing plans) */}
-      {isGenerating && hasPlans && (
-        <Card className="border-blue-200">
-          <CardContent className="space-y-3 p-4">
-            <div className="flex items-center gap-3">
-              <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-              <span className="text-sm">
-                {planProgress.progressMessage ?? "Regenerating plan..."}
-              </span>
-            </div>
-            <Progress value={planProgress.progress} className="h-1.5" />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Plans grouped by RQ */}
-      <div className="space-y-4">
-        {Array.from(groupedPlans.entries()).map(([rqText, rqPlans]) => (
-          <RQCard
-            key={rqText}
-            rqText={rqText}
-            plans={rqPlans}
-            isExpanded={expandedRQs.has(rqText)}
-            onToggle={() => toggleRQ(rqText)}
-            onUpdateStatus={handleUpdatePlanStatus}
-            updatingPlanIds={updatingPlanIds}
-          />
-        ))}
-      </div>
-
-      {/* Add Custom Test — always visible (power users can add tests anytime) */}
-      {true && (
-        <div className="pt-2">
-          {!showCustomTestForm ? (
-            <button
-              type="button"
-              onClick={() => setShowCustomTestForm(true)}
-              className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 underline-offset-2 hover:underline"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              Add custom analysis (e.g. linear regression)
-            </button>
-          ) : (
-            <Card className="border-purple-200 bg-purple-50/50">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <Sparkles className="h-4 w-4 text-purple-600" />
-                  Add Custom Statistical Test
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">Test Type</label>
-                    <select
-                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
-                      value={customTestForm.testType}
-                      onChange={(e) => setCustomTestForm(f => ({...f, testType: e.target.value}))}
-                    >
-                      <option value="linear_regression">Linear Regression (OLS)</option>
-                      <option value="logistic_regression">Logistic Regression</option>
-                      <option value="moderation_analysis">Moderation Analysis</option>
-                      <option value="mediation_analysis">Mediation Analysis</option>
-                      <option value="pearson">Pearson Correlation</option>
-                      <option value="spearman">Spearman Correlation</option>
-                      <option value="kendall_tau">Kendall Tau</option>
-                      <option value="point_biserial">Point-Biserial Correlation</option>
-                      <option value="t_test">Independent t-test</option>
-                      <option value="welchs_t">Welch t-test</option>
-                      <option value="anova">One-Way ANOVA</option>
-                      <option value="mann_whitney">Mann-Whitney U</option>
-                      <option value="kruskal_wallis">Kruskal-Wallis</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">Outcome Variable</label>
-                    <input
-                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
-                      placeholder="e.g. JobSatisfaction"
-                      value={customTestForm.depVar}
-                      onChange={(e) => setCustomTestForm(f => ({...f, depVar: e.target.value}))}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">Predictor Variable</label>
-                    <input
-                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
-                      placeholder="e.g. WLB"
-                      value={customTestForm.indepVar}
-                      onChange={(e) => setCustomTestForm(f => ({...f, indepVar: e.target.value}))}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">
-                      Control Variables <span className="font-normal">(comma-separated, optional)</span>
-                    </label>
-                    <input
-                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
-                      placeholder="e.g. Workload, Stress"
-                      value={customTestForm.controlVars}
-                      onChange={(e) => setCustomTestForm(f => ({...f, controlVars: e.target.value}))}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">Research Question (optional)</label>
-                  <input
-                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
-                    placeholder="e.g. Does WLB predict job satisfaction controlling for workload?"
-                    value={customTestForm.rqText}
-                    onChange={(e) => setCustomTestForm(f => ({...f, rqText: e.target.value}))}
-                  />
-                </div>
-                <div className="flex gap-2 pt-1">
+                {pendingCount > 0 && (
                   <Button
+                    variant="outline"
                     size="sm"
-                    onClick={handleAddCustomTest}
-                    disabled={isAddingCustom || !customTestForm.depVar || !customTestForm.indepVar}
+                    onClick={() => setShowAutoApproveConfirm(true)}
                   >
-                    {isAddingCustom ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
-                    Add & Approve Test
+                    <CheckCircle2 className="mr-1.5 h-4 w-4" />
+                    Auto-approve all
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => setShowCustomTestForm(false)}>
-                    Cancel
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
+                )}
 
-      {/* Summary Insights — visible when analysis results exist */}
-      {results.length > 0 && (
-        <Card className="border-blue-200 bg-blue-50/50">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <TrendingUp className="h-4 w-4 text-blue-600" />
-              Summary Insights
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Significance counts */}
-            <div className="flex flex-wrap gap-4">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                <span className="text-sm font-medium">{significantCount} significant</span>
-                <span className="text-xs text-muted-foreground">(p &lt; 0.05)</span>
+                <Button
+                  size="sm"
+                  disabled={!canRunAnalysis || isFinalizing}
+                  onClick={handleRunAnalysis}
+                >
+                  {isFinalizing ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <ArrowRight className="mr-2 h-4 w-4" />
+                  )}
+                  Run Analysis ({approvedCount})
+                </Button>
               </div>
-              <div className="flex items-center gap-2">
-                <MinusCircle className="h-4 w-4 text-gray-400" />
-                <span className="text-sm font-medium">{results.length - significantCount} non-significant</span>
-              </div>
+              {!canRunAnalysis && plans.length > 0 && (
+                <p className="mt-2 text-xs text-muted-foreground text-right">
+                  Approve at least one research question above to enable analysis
+                </p>
+              )}
             </div>
 
-            {/* Per-RQ traffic lights */}
-            {insightGroupedResults.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Evidence per research question</p>
-                <div className="space-y-1.5">
-                  {insightGroupedResults.map((group) => {
-                    const light = rqTrafficLights.get(group.rqText) ?? "red";
-                    return (
-                      <div key={group.rqText} className="flex items-start gap-2">
-                        {light === "green" && <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600" />}
-                        {light === "yellow" && <MinusCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-yellow-500" />}
-                        {light === "red" && <XCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" />}
-                        <p className="text-sm text-muted-foreground line-clamp-1">{group.rqText}</p>
-                        <Badge
-                          className={`ml-auto flex-shrink-0 text-xs ${
-                            light === "green" ? "bg-green-100 text-green-800" :
-                            light === "yellow" ? "bg-yellow-100 text-yellow-800" :
-                            "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {light === "green" ? "Evidence found" : light === "yellow" ? "Mixed" : "No evidence"}
-                        </Badge>
+            {/* Auto-approve confirmation dialog */}
+            {showAutoApproveConfirm && (
+              <Card className="border-blue-200 bg-blue-50">
+                <CardContent className="flex items-center justify-between p-4">
+                  <p className="text-sm">
+                    Approve all <strong>{pendingCount}</strong> proposed analyses?
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAutoApproveConfirm(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button size="sm" onClick={handleAutoApproveAll}>
+                      Approve All
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Generating overlay (re-generating with existing plans) */}
+            {isGenerating && hasPlans && (
+              <Card className="border-blue-200">
+                <CardContent className="space-y-3 p-4">
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                    <span className="text-sm">
+                      {planProgress.progressMessage ?? "Regenerating plan..."}
+                    </span>
+                  </div>
+                  <Progress value={planProgress.progress} className="h-1.5" />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Plans grouped by RQ */}
+            <div className="space-y-4">
+              {Array.from(groupedPlans.entries()).map(([rqText, rqPlans]) => (
+                <RQCard
+                  key={rqText}
+                  rqText={rqText}
+                  plans={rqPlans}
+                  isExpanded={expandedRQs.has(rqText)}
+                  onToggle={() => toggleRQ(rqText)}
+                  onUpdateStatus={handleUpdatePlanStatus}
+                  updatingPlanIds={updatingPlanIds}
+                />
+              ))}
+            </div>
+
+            {/* Add Custom Test */}
+            {true && (
+              <div className="pt-2">
+                {!showCustomTestForm ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomTestForm(true)}
+                    className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 underline-offset-2 hover:underline"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Add custom analysis (e.g. linear regression)
+                  </button>
+                ) : (
+                  <Card className="border-purple-200 bg-purple-50/50">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-sm">
+                        <Sparkles className="h-4 w-4 text-purple-600" />
+                        Add Custom Statistical Test
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-muted-foreground">Test Type</label>
+                          <select
+                            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                            value={customTestForm.testType}
+                            onChange={(e) => setCustomTestForm(f => ({...f, testType: e.target.value}))}
+                          >
+                            <option value="linear_regression">Linear Regression (OLS)</option>
+                            <option value="logistic_regression">Logistic Regression</option>
+                            <option value="moderation_analysis">Moderation Analysis</option>
+                            <option value="mediation_analysis">Mediation Analysis</option>
+                            <option value="pearson">Pearson Correlation</option>
+                            <option value="spearman">Spearman Correlation</option>
+                            <option value="kendall_tau">Kendall Tau</option>
+                            <option value="point_biserial">Point-Biserial Correlation</option>
+                            <option value="t_test">Independent t-test</option>
+                            <option value="welchs_t">Welch t-test</option>
+                            <option value="anova">One-Way ANOVA</option>
+                            <option value="mann_whitney">Mann-Whitney U</option>
+                            <option value="kruskal_wallis">Kruskal-Wallis</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-muted-foreground">Outcome Variable</label>
+                          <input
+                            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                            placeholder="e.g. JobSatisfaction"
+                            value={customTestForm.depVar}
+                            onChange={(e) => setCustomTestForm(f => ({...f, depVar: e.target.value}))}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-muted-foreground">Predictor Variable</label>
+                          <input
+                            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                            placeholder="e.g. WLB"
+                            value={customTestForm.indepVar}
+                            onChange={(e) => setCustomTestForm(f => ({...f, indepVar: e.target.value}))}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-muted-foreground">
+                            Control Variables <span className="font-normal">(comma-separated, optional)</span>
+                          </label>
+                          <input
+                            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                            placeholder="e.g. Workload, Stress"
+                            value={customTestForm.controlVars}
+                            onChange={(e) => setCustomTestForm(f => ({...f, controlVars: e.target.value}))}
+                          />
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground">Research Question (optional)</label>
+                        <input
+                          className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                          placeholder="e.g. Does WLB predict job satisfaction controlling for workload?"
+                          value={customTestForm.rqText}
+                          onChange={(e) => setCustomTestForm(f => ({...f, rqText: e.target.value}))}
+                        />
+                      </div>
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          size="sm"
+                          onClick={handleAddCustomTest}
+                          disabled={isAddingCustom || !customTestForm.depVar || !customTestForm.indepVar}
+                        >
+                          {isAddingCustom ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
+                          Add & Approve Test
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => setShowCustomTestForm(false)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             )}
 
-            {/* Key predictors from regression results */}
-            {results.some((r) => {
-              const raw = r.raw_output as Record<string, unknown> | null;
-              const details = raw?.test_details as Record<string, unknown> | null;
-              return details && typeof details === "object" && "coefficients" in details;
-            }) && (
-              <div className="space-y-2">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Key regression predictors</p>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b text-left text-muted-foreground">
-                        <th className="pb-1 pr-4 font-medium">Variable</th>
-                        <th className="pb-1 pr-4 font-medium">Coefficient</th>
-                        <th className="pb-1 font-medium">p-value</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {results.flatMap((r) => {
-                        const raw = r.raw_output as Record<string, unknown> | null;
-                        const details = raw?.test_details as Record<string, unknown> | null;
-                        if (!details || !("coefficients" in details)) return [];
-                        const coeffs = details.coefficients as Record<string, { estimate: number; p_value: number }>;
-                        return Object.entries(coeffs)
-                          .filter(([k]) => k !== "const")
-                          .slice(0, 3)
-                          .map(([varName, c]) => (
-                            <tr key={`${r.id}-${varName}`} className="border-b last:border-0">
-                              <td className="py-1 pr-4 font-medium">{varName}</td>
-                              <td className="py-1 pr-4">{c.estimate > 0 ? "+" : ""}{c.estimate.toFixed(3)}</td>
-                              <td className={`py-1 ${c.p_value < 0.05 ? "font-semibold text-green-700" : "text-muted-foreground"}`}>
-                                {c.p_value < 0.001 ? "<0.001" : c.p_value.toFixed(3)}
-                                {c.p_value < 0.05 && " *"}
-                              </td>
+            {/* Summary Insights — visible when analysis results exist */}
+            {results.length > 0 && (
+              <Card className="border-blue-200 bg-blue-50/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <TrendingUp className="h-4 w-4 text-blue-600" />
+                    Summary Insights
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Significance counts */}
+                  <div className="flex flex-wrap gap-4">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <span className="text-sm font-medium">{significantCount} significant</span>
+                      <span className="text-xs text-muted-foreground">(p &lt; 0.05)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MinusCircle className="h-4 w-4 text-gray-400" />
+                      <span className="text-sm font-medium">{results.length - significantCount} non-significant</span>
+                    </div>
+                  </div>
+
+                  {/* Per-RQ traffic lights */}
+                  {insightGroupedResults.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Evidence per research question</p>
+                      <div className="space-y-1.5">
+                        {insightGroupedResults.map((group) => {
+                          const light = rqTrafficLights.get(group.rqText) ?? "red";
+                          return (
+                            <div key={group.rqText} className="flex items-start gap-2">
+                              {light === "green" && <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600" />}
+                              {light === "yellow" && <MinusCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-yellow-500" />}
+                              {light === "red" && <XCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" />}
+                              <p className="text-sm text-muted-foreground line-clamp-1">{group.rqText}</p>
+                              <Badge
+                                className={`ml-auto flex-shrink-0 text-xs ${
+                                  light === "green" ? "bg-green-100 text-green-800" :
+                                  light === "yellow" ? "bg-yellow-100 text-yellow-800" :
+                                  "bg-red-100 text-red-800"
+                                }`}
+                              >
+                                {light === "green" ? "Evidence found" : light === "yellow" ? "Mixed" : "No evidence"}
+                              </Badge>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Key predictors from regression results */}
+                  {results.some((r) => {
+                    const raw = r.raw_output as Record<string, unknown> | null;
+                    const details = raw?.test_details as Record<string, unknown> | null;
+                    return details && typeof details === "object" && "coefficients" in details;
+                  }) && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Key regression predictors</p>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b text-left text-muted-foreground">
+                              <th className="pb-1 pr-4 font-medium">Variable</th>
+                              <th className="pb-1 pr-4 font-medium">Coefficient</th>
+                              <th className="pb-1 font-medium">p-value</th>
                             </tr>
-                          ));
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                          </thead>
+                          <tbody>
+                            {results.flatMap((r) => {
+                              const raw = r.raw_output as Record<string, unknown> | null;
+                              const details = raw?.test_details as Record<string, unknown> | null;
+                              if (!details || !("coefficients" in details)) return [];
+                              const coeffs = details.coefficients as Record<string, { estimate: number; p_value: number }>;
+                              return Object.entries(coeffs)
+                                .filter(([k]) => k !== "const")
+                                .slice(0, 3)
+                                .map(([varName, c]) => (
+                                  <tr key={`${r.id}-${varName}`} className="border-b last:border-0">
+                                    <td className="py-1 pr-4 font-medium">{varName}</td>
+                                    <td className="py-1 pr-4">{c.estimate > 0 ? "+" : ""}{c.estimate.toFixed(3)}</td>
+                                    <td className={`py-1 ${c.p_value < 0.05 ? "font-semibold text-green-700" : "text-muted-foreground"}`}>
+                                      {c.p_value < 0.001 ? "<0.001" : c.p_value.toFixed(3)}
+                                      {c.p_value < 0.05 && " *"}
+                                    </td>
+                                  </tr>
+                                ));
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Continue to Visualisation — visible when all plans completed */}
+            {allCompleted && (
+              <div className="flex justify-end border-t pt-4 mt-4">
+                <Button onClick={() => { router.refresh(); router.push(`/projects/${projectId}/step/7`); }}>
+                  Continue to Visualisation
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
               </div>
             )}
-          </CardContent>
-        </Card>
-      )}
+          </div>
+        </TabsContent>
 
-      {/* Continue to Visualisation — visible when all plans completed */}
-      {allCompleted && (
-        <div className="flex justify-end border-t pt-4 mt-4">
-          <Button onClick={() => { router.refresh(); router.push(`/projects/${projectId}/step/7`); }}>
-            Continue to Visualisation
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
-        </div>
-      )}
+        {/* ============================================================ */}
+        {/*  TAB: Diagnostics                                             */}
+        {/* ============================================================ */}
+        <TabsContent value="diagnostics">
+          <DiagnosticsTab edaResults={edaResults} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -1203,6 +1245,425 @@ function PlanRow({ plan, isUpdating, onUpdateStatus }: PlanRowProps) {
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Profile helpers                                                    */
+/* ------------------------------------------------------------------ */
+
+function getProfile(eda: EDAResult): Record<string, unknown> {
+  if (!eda.profile || typeof eda.profile !== "object" || Array.isArray(eda.profile)) return {};
+  return eda.profile as Record<string, unknown>;
+}
+
+function num(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function fmt(v: unknown, decimals = 2): string {
+  const n = num(v);
+  return n === null ? "—" : n.toFixed(decimals);
+}
+
+function pct(v: unknown): string {
+  const n = num(v);
+  return n === null ? "—" : `${n.toFixed(1)}%`;
+}
+
+function qualityColor(score: number | null): string {
+  if (score === null) return "bg-gray-100 text-gray-600";
+  if (score >= 80) return "bg-green-100 text-green-800";
+  if (score >= 60) return "bg-yellow-100 text-yellow-800";
+  return "bg-red-100 text-red-800";
+}
+
+function qualityBarColor(score: number | null): string {
+  if (score === null) return "bg-gray-300";
+  if (score >= 80) return "bg-green-500";
+  if (score >= 60) return "bg-yellow-500";
+  return "bg-red-500";
+}
+
+function missingStatus(missingPct: number): { label: string; cls: string } {
+  if (missingPct < 5) return { label: "OK", cls: "text-green-600" };
+  if (missingPct <= 15) return { label: "Warning", cls: "text-yellow-600" };
+  return { label: "Critical", cls: "text-red-600" };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Descriptive Analysis Tab                                           */
+/* ------------------------------------------------------------------ */
+
+function DescriptiveTab({ edaResults }: { edaResults: EDAResult[] }) {
+  if (edaResults.length === 0) {
+    return (
+      <Card className="mt-4 border-dashed">
+        <CardContent className="flex flex-col items-center justify-center py-12">
+          <Info className="mb-4 h-10 w-10 text-muted-foreground/50" />
+          <p className="text-sm text-muted-foreground">
+            Quality analysis not yet run — complete Step 4 first
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const outcomes = edaResults.filter((e) => e.column_role === "outcome");
+  const demographics = edaResults.filter((e) => e.column_role === "demographic");
+  const covariates = edaResults.filter((e) => e.column_role === "covariate");
+
+  const avgQuality =
+    edaResults.reduce((sum, e) => sum + (e.quality_score ?? 0), 0) / edaResults.length;
+
+  return (
+    <div className="space-y-6 pt-2">
+      {/* Dataset summary card */}
+      <Card>
+        <CardContent className="flex flex-wrap gap-6 p-4">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Total columns</p>
+            <p className="text-lg font-semibold">{edaResults.length}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Outcome variables</p>
+            <p className="text-lg font-semibold">{outcomes.length}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Demographics</p>
+            <p className="text-lg font-semibold">{demographics.length}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Covariates</p>
+            <p className="text-lg font-semibold">{covariates.length}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Avg quality score</p>
+            <p className="text-lg font-semibold">
+              <Badge className={qualityColor(avgQuality)}>{avgQuality.toFixed(0)}</Badge>
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Outcome variables — detailed cards */}
+      {outcomes.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Outcome Variables
+          </h3>
+          <div className="grid gap-3 md:grid-cols-2">
+            {outcomes.map((eda) => (
+              <OutcomeCard key={eda.id} eda={eda} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Demographic variables — summary table */}
+      {demographics.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Demographic Variables
+          </h3>
+          <RoleSummaryTable items={demographics} />
+        </div>
+      )}
+
+      {/* Covariate variables — summary table */}
+      {covariates.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Covariate Variables
+          </h3>
+          <RoleSummaryTable items={covariates} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---- Outcome card (detailed) ---- */
+
+function OutcomeCard({ eda }: { eda: EDAResult }) {
+  const p = getProfile(eda);
+  const isContinuous = eda.data_type === "continuous";
+  const isLikert = eda.data_type === "likert";
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-sm font-medium">{eda.column_name}</CardTitle>
+          <div className="flex items-center gap-1.5">
+            <Badge variant="outline" className="text-xs">{eda.data_type}</Badge>
+            <Badge className={`text-xs ${qualityColor(eda.quality_score)}`}>
+              {eda.quality_score ?? "—"}
+            </Badge>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="text-xs space-y-2">
+        {isContinuous ? (
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+            <span className="text-muted-foreground">Mean +/- Std</span>
+            <span>{fmt(p.mean)} +/- {fmt(p.std)}</span>
+            <span className="text-muted-foreground">Median</span>
+            <span>{fmt(p.median)}</span>
+            <span className="text-muted-foreground">Range</span>
+            <span>[{fmt(p.min)} — {fmt(p.max)}]</span>
+            <span className="text-muted-foreground">n</span>
+            <span>{num(p.numeric_count) ?? "—"}</span>
+            <span className="text-muted-foreground">Missing</span>
+            <span>{pct(p.missing_pct)}</span>
+          </div>
+        ) : (
+          <FrequencyList profile={p} isLikert={isLikert} />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ---- Frequency list for categorical / likert ---- */
+
+function FrequencyList({
+  profile,
+  isLikert,
+}: {
+  profile: Record<string, unknown>;
+  isLikert: boolean;
+}) {
+  const freqRaw = isLikert
+    ? (profile.frequency_table as Record<string, unknown> | undefined)
+    : (profile.frequency_table_top10 as Record<string, unknown> | undefined) ??
+      (profile.frequency_table as Record<string, unknown> | undefined);
+
+  if (!freqRaw || typeof freqRaw !== "object") {
+    return <p className="text-muted-foreground">No frequency data</p>;
+  }
+
+  const entries = Object.entries(freqRaw)
+    .map(([value, stats]) => {
+      const s = stats as Record<string, unknown> | null;
+      return {
+        value,
+        count: num(s?.count) ?? 0,
+        pctVal: num(s?.pct) ?? 0,
+      };
+    })
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+
+  return (
+    <div className="space-y-1">
+      {entries.map((e) => (
+        <div key={e.value} className="flex items-center justify-between gap-2">
+          <span className="truncate">{e.value}</span>
+          <span className="shrink-0 text-muted-foreground">
+            {e.count} ({e.pctVal.toFixed(1)}%)
+          </span>
+        </div>
+      ))}
+      {isLikert && (
+        <p className="text-muted-foreground pt-1">Median: {fmt(profile.median)}</p>
+      )}
+    </div>
+  );
+}
+
+/* ---- Summary table for demographics / covariates ---- */
+
+function RoleSummaryTable({ items }: { items: EDAResult[] }) {
+  return (
+    <div className="overflow-x-auto rounded-lg border">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b bg-muted/50 text-left text-muted-foreground">
+            <th className="px-3 py-2 font-medium">Column</th>
+            <th className="px-3 py-2 font-medium">Type</th>
+            <th className="px-3 py-2 font-medium text-right">n</th>
+            <th className="px-3 py-2 font-medium">Key stat</th>
+            <th className="px-3 py-2 font-medium text-right">Missing %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((eda) => {
+            const p = getProfile(eda);
+            const isContinuous = eda.data_type === "continuous";
+            const n = num(isContinuous ? p.numeric_count : p.non_null_count);
+            const keyStat = isContinuous
+              ? `mean ${fmt(p.mean)}, sd ${fmt(p.std)}`
+              : `${num(p.n_unique) ?? "—"} unique`;
+            const missingPctVal = num(p.missing_pct);
+            return (
+              <tr key={eda.id} className="border-b last:border-0">
+                <td className="px-3 py-1.5 font-medium">{eda.column_name}</td>
+                <td className="px-3 py-1.5">
+                  <Badge variant="outline" className="text-[10px]">{eda.data_type}</Badge>
+                </td>
+                <td className="px-3 py-1.5 text-right">{n ?? "—"}</td>
+                <td className="px-3 py-1.5 text-muted-foreground">{keyStat}</td>
+                <td className="px-3 py-1.5 text-right">{missingPctVal !== null ? `${missingPctVal.toFixed(1)}%` : "—"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Diagnostics Tab                                                    */
+/* ------------------------------------------------------------------ */
+
+function DiagnosticsTab({ edaResults }: { edaResults: EDAResult[] }) {
+  if (edaResults.length === 0) {
+    return (
+      <Card className="mt-4 border-dashed">
+        <CardContent className="flex flex-col items-center justify-center py-12">
+          <Info className="mb-4 h-10 w-10 text-muted-foreground/50" />
+          <p className="text-sm text-muted-foreground">
+            Quality analysis not yet run — complete Step 4 first
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Missing data
+  const missingRows = edaResults
+    .map((eda) => {
+      const p = getProfile(eda);
+      return { eda, missingPct: num(p.missing_pct) ?? 0 };
+    })
+    .filter((r) => r.missingPct > 0)
+    .sort((a, b) => b.missingPct - a.missingPct);
+
+  // Outliers
+  const outlierRows = edaResults
+    .map((eda) => {
+      const p = getProfile(eda);
+      const outlierCount = num(p.outlier_count) ?? 0;
+      const total = num(p.numeric_count) ?? num(p.non_null_count) ?? 0;
+      const outlierPct = total > 0 ? (outlierCount / total) * 100 : 0;
+      return { eda, outlierCount, outlierPct };
+    })
+    .filter((r) => r.outlierCount > 0)
+    .sort((a, b) => b.outlierCount - a.outlierCount);
+
+  // Quality scores sorted ascending (worst first)
+  const qualitySorted = [...edaResults]
+    .filter((e) => e.quality_score !== null)
+    .sort((a, b) => (a.quality_score ?? 0) - (b.quality_score ?? 0));
+
+  const noIssues = missingRows.length === 0 && outlierRows.length === 0;
+
+  return (
+    <div className="space-y-6 pt-2">
+      {noIssues && qualitySorted.every((e) => (e.quality_score ?? 0) >= 80) && (
+        <Card className="border-green-200 bg-green-50">
+          <CardContent className="flex items-center gap-3 p-4">
+            <CheckCircle2 className="h-5 w-5 text-green-600" />
+            <p className="text-sm font-medium text-green-800">No data quality issues detected</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Missing Data */}
+      {missingRows.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Missing Data
+          </h3>
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b bg-muted/50 text-left text-muted-foreground">
+                  <th className="px-3 py-2 font-medium">Column</th>
+                  <th className="px-3 py-2 font-medium">Role</th>
+                  <th className="px-3 py-2 font-medium text-right">Missing %</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {missingRows.map(({ eda, missingPct }) => {
+                  const status = missingStatus(missingPct);
+                  return (
+                    <tr key={eda.id} className="border-b last:border-0">
+                      <td className="px-3 py-1.5 font-medium">{eda.column_name}</td>
+                      <td className="px-3 py-1.5">{eda.column_role ?? "—"}</td>
+                      <td className="px-3 py-1.5 text-right">{missingPct.toFixed(1)}%</td>
+                      <td className={`px-3 py-1.5 font-medium ${status.cls}`}>{status.label}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Outliers */}
+      {outlierRows.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Outliers
+          </h3>
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b bg-muted/50 text-left text-muted-foreground">
+                  <th className="px-3 py-2 font-medium">Column</th>
+                  <th className="px-3 py-2 font-medium">Role</th>
+                  <th className="px-3 py-2 font-medium text-right">Outlier count</th>
+                  <th className="px-3 py-2 font-medium text-right">% of data</th>
+                </tr>
+              </thead>
+              <tbody>
+                {outlierRows.map(({ eda, outlierCount, outlierPct }) => (
+                  <tr key={eda.id} className="border-b last:border-0">
+                    <td className="px-3 py-1.5 font-medium">{eda.column_name}</td>
+                    <td className="px-3 py-1.5">{eda.column_role ?? "—"}</td>
+                    <td className="px-3 py-1.5 text-right">{outlierCount}</td>
+                    <td className="px-3 py-1.5 text-right">{outlierPct.toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Data Quality Overview */}
+      {qualitySorted.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Data Quality Overview
+          </h3>
+          <div className="space-y-2">
+            {qualitySorted.map((eda) => {
+              const score = eda.quality_score ?? 0;
+              return (
+                <div key={eda.id} className="flex items-center gap-3">
+                  <span className="w-36 truncate text-xs font-medium">{eda.column_name}</span>
+                  <div className="flex-1 h-3 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${qualityBarColor(eda.quality_score)}`}
+                      style={{ width: `${score}%` }}
+                    />
+                  </div>
+                  <span className="w-8 text-right text-xs font-medium">{score}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

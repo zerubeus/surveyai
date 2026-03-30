@@ -48,6 +48,22 @@ export default async function Step6Page({
     }
   }
 
+  // Fetch EDA column profiles (descriptive stats)
+  const datasetId = dataset?.id ?? null;
+  const edaRes = datasetId
+    ? await supabase
+        .from("eda_results")
+        .select("id, column_name, column_role, data_type, profile, quality_score")
+        .eq("dataset_id", datasetId)
+        .eq("result_type", "column_profile")
+        .order("column_name", { ascending: true })
+    : { data: [] };
+
+  const edaResults = (edaRes.data ?? []) as Pick<
+    Tables<"eda_results">,
+    "id" | "column_name" | "column_role" | "data_type" | "profile" | "quality_score"
+  >[];
+
   const { data: runningTasksRaw } = await supabase
     .from("tasks")
     .select("id, task_type, status")
@@ -70,6 +86,7 @@ export default async function Step6Page({
       hasWeightColumn={hasWeightColumn}
       weightColumnName={weightColumnName}
       initialRunningTaskIds={initialTaskIds}
+      edaResults={edaResults}
     />
   );
 }
