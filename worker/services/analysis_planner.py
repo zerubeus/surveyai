@@ -85,7 +85,14 @@ def generate_analysis_plan(
     db.update_task_progress(task_id, 15, "Loading column mappings...")
     mappings = db.select("column_mappings", filters={"dataset_id": dataset_id})
     if not mappings:
-        raise ValueError(f"No column mappings found for dataset {dataset_id}")
+        # Fallback: check if this dataset has a parent with mappings
+        dataset_row = db.select("datasets", filters={"id": dataset_id})
+        parent_id = (dataset_row[0].get("parent_id") if dataset_row else None)
+        if parent_id:
+            mappings = db.select("column_mappings", filters={"dataset_id": parent_id})
+            logger.info("column_mappings_from_parent", dataset_id=dataset_id, parent_id=parent_id, count=len(mappings))
+        if not mappings:
+            raise ValueError(f"No column mappings found for dataset {dataset_id} or its parent")
 
     # Build column info for prompt
     columns_info: list[dict[str, str]] = []

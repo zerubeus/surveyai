@@ -170,6 +170,18 @@ def apply_cleaning_operation(
             {"id": new_dataset_id},
         )
 
+        # Copy column_mappings from parent dataset to new dataset version
+        try:
+            parent_mappings = db.select("column_mappings", filters={"dataset_id": current_dataset["id"]})
+            if parent_mappings:
+                for mapping in parent_mappings:
+                    new_mapping = {k: v for k, v in mapping.items() if k not in ("id", "created_at", "updated_at")}
+                    new_mapping["dataset_id"] = new_dataset_id
+                    db.client.table("column_mappings").insert(new_mapping).execute()
+                logger.info("column_mappings_copied", count=len(parent_mappings), new_dataset_id=new_dataset_id)
+        except Exception as e:
+            logger.warning("column_mappings_copy_failed", error=str(e))
+
     # Step 7: Update operation
     db.update_task_progress(task_id, 85, "Recording results...")
     now = datetime.now(timezone.utc).isoformat()
