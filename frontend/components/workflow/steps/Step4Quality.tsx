@@ -658,12 +658,13 @@ export function Step4Quality({
     return auditSections.find((s) => s.key === "step-1");
   }, [auditSections]);
 
-  // Default open sections: only sections with issues
+  // Default open sections: all sections that have issues (including step-1 if it has items)
   const defaultOpenSections = useMemo(() => {
-    const withIssues = sectionsWithIssues.map((s) => s.key);
-    // If no issues anywhere, default to step-1
-    return withIssues.length > 0 ? withIssues : ["step-1"];
-  }, [sectionsWithIssues]);
+    const withIssues = auditSections
+      .filter((s) => s.issues.length > 0)
+      .map((s) => s.key);
+    return withIssues.length > 0 ? withIssues : [];
+  }, [auditSections]);
 
   /* ---------- Compute displayScore factoring in unresolved issues ---------- */
   const displayScore = useMemo(() => {
@@ -1131,9 +1132,9 @@ export function Step4Quality({
       </Card>
 
       {/* Audit sections with issues */}
-      {sectionsWithIssues.length > 0 && (
+      {auditSections.length > 0 && (
         <Accordion type="multiple" defaultValue={defaultOpenSections} className="space-y-2">
-          {sectionsWithIssues.map((section) => {
+          {auditSections.map((section) => {
             const activeIssues = section.issues.filter((i) => !dismissedIds.has(i.id));
             const sectionDismissed = section.issues.filter((i) => dismissedIds.has(i.id));
             const issueCount = activeIssues.length;
@@ -1371,46 +1372,6 @@ export function Step4Quality({
             </AccordionItem>
           );
         })}
-        </Accordion>
-      )}
-
-      {/* Clean sections summary */}
-      {cleanSections.length > 0 && (
-        <p className="text-sm text-muted-foreground flex items-center gap-2">
-          <CheckCircle2 className="h-4 w-4 text-green-500" />
-          No issues found in: {cleanSections.map((s) => s.name).join(", ")}
-        </p>
-      )}
-
-      {/* Info section (Initial Data Audit) at bottom */}
-      {infoSection && infoSection.issues.length > 0 && (
-        <Accordion type="single" collapsible className="mt-2">
-          <AccordionItem value="step-1" className="rounded-lg border">
-            <AccordionTrigger className="px-4 hover:no-underline">
-              <div className="flex flex-1 items-center gap-3 text-left">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                  1
-                </span>
-                <span className="text-sm font-medium">{infoSection.name}</span>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="px-4 pb-4">
-              <div className="space-y-3">
-                {infoSection.issues.map((issue) => (
-                  <div key={issue.id} className="rounded-lg border p-4 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs">
-                        info
-                      </Badge>
-                      <span className="text-sm font-medium">{issue.title}</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{issue.description}</p>
-                    <p className="text-xs text-muted-foreground">{issue.recommendation}</p>
-                  </div>
-                ))}
-              </div>
-            </AccordionContent>
-          </AccordionItem>
         </Accordion>
       )}
 
