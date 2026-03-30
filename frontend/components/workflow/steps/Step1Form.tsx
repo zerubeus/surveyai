@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useOnboardingTour } from "@/hooks/useOnboardingTour";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/browser";
@@ -77,7 +77,15 @@ type AudienceValue = (typeof AUDIENCE_OPTIONS)[number]["value"];
 
 function parseResearchQuestions(rq: Json): string[] {
   if (Array.isArray(rq)) {
-    return rq.filter((q): q is string => typeof q === "string");
+    return rq
+      .map((q) => {
+        if (typeof q === "string") return q;
+        if (q && typeof q === "object" && "text" in q && typeof (q as { text: string }).text === "string") {
+          return (q as { text: string }).text;
+        }
+        return null;
+      })
+      .filter((q): q is string => q !== null);
   }
   return [];
 }
@@ -154,27 +162,20 @@ export function Step1Form({ project }: Step1FormProps) {
   const isNewProject = !project.pipeline_status || Object.keys(project.pipeline_status as Record<string, unknown>).length === 0;
   const { restartTour } = useOnboardingTour(1, isNewProject);
 
-  // -- Read AI prefill from additional_context --
-  const aiPrefill = (() => {
+  // -- Read AI prefill from additional_context (preserve full context for merging) --
+  const parsedAdditionalContext = (() => {
     try {
-      const ctx = project.additional_context
+      return project.additional_context
         ? JSON.parse(project.additional_context as string)
-        : null;
-      return ctx?.ai_prefill ?? null;
+        : {};
     } catch {
-      return null;
+      return {};
     }
   })();
-  const aiPrefillFields: string[] = (() => {
-    try {
-      const ctx = project.additional_context
-        ? JSON.parse(project.additional_context as string)
-        : null;
-      return Array.isArray(ctx?.ai_prefill_fields) ? ctx.ai_prefill_fields : [];
-    } catch {
-      return [];
-    }
-  })();
+  const aiPrefill = parsedAdditionalContext?.ai_prefill ?? null;
+  const aiPrefillFields: string[] = Array.isArray(parsedAdditionalContext?.ai_prefill_fields)
+    ? parsedAdditionalContext.ai_prefill_fields
+    : [];
   const isAiField = (field: string) => aiPrefillFields.includes(field);
 
   // -- form state — use AI prefill as defaults when available --
@@ -236,12 +237,15 @@ export function Step1Form({ project }: Step1FormProps) {
     JSON.stringify(geoScope)
   );
   useAutoSave("projects", project.id, "research_questions", researchQuestions);
-  useAutoSave(
-    "projects",
-    project.id,
-    "additional_context",
-    JSON.stringify({ audience: audience || null })
-  );
+
+  // Merge audience into existing additional_context to preserve ai_prefill data
+  const mergedAdditionalContext = useMemo(() => {
+    return JSON.stringify({
+      ...parsedAdditionalContext,
+      audience: audience || null,
+    });
+  }, [parsedAdditionalContext, audience]);
+  useAutoSave("projects", project.id, "additional_context", mergedAdditionalContext);
 
   // -- validation --
   const filledQuestions = researchQuestions.filter((q) => q.trim().length > 0);
@@ -312,7 +316,7 @@ export function Step1Form({ project }: Step1FormProps) {
         target_population: targetPopulation || null,
         geographic_scope: JSON.stringify(geoScope),
         research_questions: researchQuestions as unknown as Json,
-        additional_context: JSON.stringify({ audience: audience || null }),
+        additional_context: mergedAdditionalContext,
         current_step: 3,
         pipeline_status: newPipeline as unknown as Json,
       })

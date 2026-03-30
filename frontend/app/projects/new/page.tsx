@@ -257,9 +257,9 @@ export default function NewProjectPage() {
       setStatus("analyzing");
       setStatusMsg("AI is reading your data…");
 
-      const { data: taskRaw } = await (supabase as unknown as {
+      const { data: taskRaw, error: taskError } = await (supabase as unknown as {
         from: (t: string) => {
-          insert: (d: unknown) => { select: (s: string) => { single: () => Promise<{ data: unknown }> } }
+          insert: (d: unknown) => { select: (s: string) => { single: () => Promise<{ data: unknown; error: { message: string } | null }> } }
         }
       })
         .from("tasks")
@@ -275,12 +275,17 @@ export default function NewProjectPage() {
         .select("id")
         .single();
 
+      if (taskError) {
+        console.error("Failed to create analyze_uploads task:", taskError.message);
+      }
+
       const taskId = (taskRaw as { id: string } | null)?.id ?? null;
       if (taskId) {
         setAnalyzeTaskId(taskId);
         // useEffect above will redirect when task completes
       } else {
         // Couldn't dispatch task — go to step 1 immediately (empty form)
+        console.warn("Task ID not returned, redirecting to step 1 without AI analysis");
         router.push(`/projects/${pid}/step/1`);
       }
 
