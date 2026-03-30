@@ -1,12 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { createBrowserClient } from "@/lib/supabase/browser";
 import {
   Check,
   Lock,
   AlertTriangle,
-  Loader2,
   FileText,
   Upload,
   Columns,
@@ -18,6 +19,10 @@ import {
 import { cn } from "@/lib/utils";
 import type { PipelineStatus, StepStatus } from "@/lib/types/database";
 
+/* ------------------------------------------------------------------ */
+/*  Step definitions                                                   */
+/* ------------------------------------------------------------------ */
+
 const STEPS = [
   { num: 1, name: "Project Brief", icon: FileText },
   { num: 2, name: "Upload", icon: Upload },
@@ -28,117 +33,134 @@ const STEPS = [
   { num: 7, name: "Report", icon: FileOutput },
 ] as const;
 
-interface ActiveTask {
-  status: string;
-  progress: number;
-}
+const DEFAULT_PIPELINE: PipelineStatus = {
+  "1": "active",
+  "2": "locked",
+  "3": "locked",
+  "4": "locked",
+  "5": "locked",
+  "6": "locked",
+  "7": "locked",
+};
+
+/* ------------------------------------------------------------------ */
+/*  Props                                                              */
+/* ------------------------------------------------------------------ */
 
 interface StepBarProps {
   projectId: string;
-  currentStep: number;
-  pipelineStatus: PipelineStatus;
-  activeTasksByStep?: Record<number, ActiveTask>;
+  /** Initial pipeline status from SSR — overridden by client fetch */
+  initialPipelineStatus?: PipelineStatus;
 }
 
-export function StepBar({ projectId, currentStep, pipelineStatus, activeTasksByStep }: StepBarProps) {
+/* ------------------------------------------------------------------ */
+/*  Component                                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * StepBar fetches its own pipeline_status client-side so it always reflects
+ * the latest DB state regardless of Next.js layout caching.
+ * It uses usePathname() to highlight the step the user is currently on.
+ */
+export function StepBar({ projectId, initialPipelineStatus }: StepBarProps) {
   const pathname = usePathname();
-  // Derive the active step from the URL (e.g. /projects/[id]/step/3 → 3)
+
+  // Derive current step from URL — /projects/[id]/step/N → N
   const urlStepMatch = pathname?.match(/\/step\/(\d+)/);
-  const activeStep = urlStepMatch ? parseInt(urlStepMatch[1], 10) : currentStep;
+  const activeStep = urlStepMatch ? parseInt(urlStepMatch[1], 10) : 1;
+
+  // Pipeline status — start with SSR value, then refresh client-side
+  const [pipelineStatus, setPipelineStatus] = useState<PipelineStatus>(
+    initialPipelineStatus ?? DEFAULT_PIPELINE,
+  );
+
+  useEffect(() => {
+    if (!projectId) return;
+    const supabase = createBrowserClient();
+    supabase
+      .from("projects")
+      .select("pipeline_status")
+      .eq("id", projectId)
+      .single()
+      .then(({ data }) => {
+        if (data?.pipeline_status) {
+          setPipelineStatus(data.pipeline_status as PipelineStatus);
+        }
+      });
+  }, [projectId, pathname]); // re-fetch whenever pathname changes (= step navigation)
 
   return (
-    <nav className="w-full overflow-x-auto">
-      <ol className="flex items-center gap-0">
+    <nav className="w-full overflow-x-auto" aria-label="Workflow steps">
+      <ol className="flex items-center">
         {STEPS.map((step, idx) => {
           const status: StepStatus =
             (pipelineStatus[String(step.num)] as StepStatus) ?? "locked";
-          const isClickable = status === "completed" || status === "active" || status === "needs-refresh";
           const isCurrent = step.num === activeStep;
+          const isClickable =
+            status === "completed" ||
+            status === "active" ||
+            status === "needs-refresh" ||
+            isCurrent;
 
-          const stepContent = (
+          const circleClass = cn(
+            "flex h-9 w-9 items-center justify-center rounded-full border-2 text-sm font-medium transition-all duration-200",
+            // Current step — always blue ring regardless of status
+            isCurrent &&
+              "border-blue-600 bg-blue-600 text-white shadow-[0_0_0_3px_rgba(37,99,235,0.2)]",
+            // Non-current completed
+            !isCurrent && status === "completed" &&
+              "border-green-500 bg-green-500 text-white",
+            // Non-current active (but not current)
+            !isCurrent && status === "active" &&
+              "border-blue-500 bg-blue-500 text-white",
+            // Locked
+            !isCurrent && status === "locked" &&
+              "border-muted-foreground/30 bg-muted text-muted-foreground",
+            // Needs refresh
+            !isCurrent && status === "needs-refresh" &&
+              "border-yellow-500 bg-yellow-50 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300",
+          );
+
+          const labelClass = cn(
+            "hidden text-xs sm:block mt-1.5 text-center",
+            isCurrent && "text-blue-600 font-semibold",
+            !isCurrent && status === "completed" && "text-green-600 font-medium",
+            !isCurrent && status === "active" && "text-blue-500 font-medium",
+            !isCurrent && status === "locked" && "text-muted-foreground",
+            !isCurrent && status === "needs-refresh" && "text-yellow-600 font-medium",
+          );
+
+          // Icon inside circle
+          const circleContent = isCurrent ? (
+            // Current step always shows number
+            step.num
+          ) : status === "completed" ? (
+            <Check className="h-4 w-4" />
+          ) : status === "locked" ? (
+            <Lock className="h-3.5 w-3.5" />
+          ) : status === "needs-refresh" ? (
+            <AlertTriangle className="h-4 w-4" />
+          ) : (
+            step.num
+          );
+
+          const stepNode = (
             <li
               key={step.num}
               className={cn("flex items-center", idx < STEPS.length - 1 && "flex-1")}
             >
-              <div
-                className={cn(
-                  "flex flex-col items-center gap-1.5",
-                  isClickable ? "cursor-pointer" : "cursor-default"
-                )}
-              >
-                {/* Circle */}
-                <div className="relative">
-                  <div
-                    className={cn(
-                      "flex h-9 w-9 items-center justify-center rounded-full border-2 text-sm font-medium transition-colors",
-                      status === "completed" && !isCurrent &&
-                        "border-green-500 bg-green-500 text-white",
-                      status === "completed" && isCurrent &&
-                        "border-blue-600 bg-blue-600 text-white ring-2 ring-blue-300 ring-offset-1",
-                      status === "active" && !isCurrent &&
-                        "border-blue-500 bg-blue-500 text-white",
-                      status === "active" && isCurrent &&
-                        "border-blue-600 bg-blue-600 text-white ring-2 ring-blue-300 ring-offset-1",
-                      status === "locked" && !isCurrent &&
-                        "border-muted-foreground/30 bg-muted text-muted-foreground",
-                      status === "locked" && isCurrent &&
-                        "border-blue-500 bg-blue-500 text-white",
-                      status === "needs-refresh" && !isCurrent &&
-                        "border-yellow-500 bg-yellow-50 text-yellow-700",
-                      status === "needs-refresh" && isCurrent &&
-                        "border-blue-600 bg-blue-600 text-white ring-2 ring-blue-300 ring-offset-1"
-                    )}
-                  >
-                    {isCurrent ? (
-                      step.num
-                    ) : status === "completed" ? (
-                      <Check className="h-4 w-4" />
-                    ) : status === "locked" ? (
-                      <Lock className="h-3.5 w-3.5" />
-                    ) : status === "needs-refresh" ? (
-                      <AlertTriangle className="h-4 w-4" />
-                    ) : (
-                      step.num
-                    )}
-                  </div>
-                  {/* Pulsing ring for active+current step */}
-                  {status === "active" && isCurrent && (
-                    <div className="absolute inset-0 animate-ping rounded-full border-2 border-blue-400 opacity-30" />
-                  )}
-                  {/* Task running badge */}
-                  {activeTasksByStep?.[step.num] &&
-                    (activeTasksByStep[step.num].status === "running" ||
-                      activeTasksByStep[step.num].status === "claimed" ||
-                      activeTasksByStep[step.num].status === "pending") && (
-                      <span
-                        className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-white"
-                        title="Analysing..."
-                      >
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      </span>
-                    )}
-                </div>
-                {/* Label — hidden on mobile */}
-                <span
-                  className={cn(
-                    "hidden text-xs sm:block",
-                    isCurrent && "text-blue-600 font-semibold",
-                    !isCurrent && status === "completed" && "text-green-600 font-medium",
-                    !isCurrent && status === "active" && "text-blue-600 font-medium",
-                    !isCurrent && status === "locked" && "text-muted-foreground",
-                    !isCurrent && status === "needs-refresh" && "text-yellow-600 font-medium"
-                  )}
-                >
-                  {step.name}
-                </span>
+              {/* Step circle + label */}
+              <div className={cn("flex flex-col items-center", isClickable ? "cursor-pointer" : "cursor-default")}>
+                <div className={circleClass}>{circleContent}</div>
+                <span className={labelClass}>{step.name}</span>
               </div>
 
               {/* Connector line */}
               {idx < STEPS.length - 1 && (
                 <div
                   className={cn(
-                    "mx-2 h-0.5 flex-1 min-w-[2rem]",
-                    status === "completed" ? "bg-green-500" : "bg-muted"
+                    "mx-2 h-0.5 flex-1 min-w-[1.5rem] transition-colors duration-300",
+                    status === "completed" ? "bg-green-500" : "bg-muted",
                   )}
                 />
               )}
@@ -150,22 +172,15 @@ export function StepBar({ projectId, currentStep, pipelineStatus, activeTasksByS
               <Link
                 key={step.num}
                 href={`/projects/${projectId}/step/${step.num}`}
-                className={cn(
-                  "contents",
-                  status === "needs-refresh" && "group"
-                )}
-                title={
-                  status === "needs-refresh"
-                    ? "Results may be stale — click to review"
-                    : step.name
-                }
+                className="contents"
+                title={step.name}
               >
-                {stepContent}
+                {stepNode}
               </Link>
             );
           }
 
-          return stepContent;
+          return <span key={step.num} className="contents">{stepNode}</span>;
         })}
       </ol>
     </nav>

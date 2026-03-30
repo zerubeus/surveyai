@@ -493,10 +493,21 @@ export function Step4Quality({
     [datasetId, selectedFixes, customTexts, dispatchTask, project.id, supabase],
   );
 
-  const handleContinue = useCallback(() => {
+  const handleContinue = useCallback(async () => {
+    // Mark step 4 completed in DB before navigating
+    const newPipeline: PipelineStatus = {
+      ...((project.pipeline_status as PipelineStatus) ?? {}),
+      "4": "completed",
+      "5": "active",
+    };
+    await supabase
+      .from("projects")
+      // @ts-ignore — supabase update type inference
+      .update({ current_step: 5, pipeline_status: newPipeline as unknown as Json })
+      .eq("id", project.id);
     router.refresh();
     router.push(`/projects/${project.id}/step/5`);
-  }, [router, project.id]);
+  }, [router, project.id, project.pipeline_status, supabase]);
 
   /* ================================================================ */
   /*  No dataset guard                                                 */

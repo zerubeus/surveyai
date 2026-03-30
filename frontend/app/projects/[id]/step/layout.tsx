@@ -64,8 +64,7 @@ export default async function StepLayout({
 
       <StepBar
         projectId={project.id}
-        currentStep={project.current_step ?? 1}
-        pipelineStatus={pipelineStatus}
+        initialPipelineStatus={pipelineStatus}
       />
 
       <div className="mt-8">{children}</div>
