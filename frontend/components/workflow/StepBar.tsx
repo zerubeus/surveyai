@@ -83,8 +83,9 @@ export function StepBar({ projectId, initialPipelineStatus }: StepBarProps) {
       .eq("id", projectId)
       .single()
       .then(({ data }) => {
-        if (data?.pipeline_status) {
-          setPipelineStatus(data.pipeline_status as PipelineStatus);
+        const d = data as { pipeline_status?: unknown } | null;
+        if (d?.pipeline_status) {
+          setPipelineStatus(d.pipeline_status as PipelineStatus);
         }
       });
   }, [projectId, pathname]); // re-fetch whenever pathname changes (= step navigation)
