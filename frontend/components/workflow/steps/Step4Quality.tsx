@@ -521,6 +521,13 @@ export function Step4Quality({
   const summary = datasetSummary?.profile as Record<string, Json> | null;
   const overallQuality = (summary?.overall_quality as number) ?? null;
 
+  /* ---------- Cleaning suggestions loading state ---------- */
+  const cleaningSuggestionsLoading =
+    (cleaningSuggestionsProgress.status === "running" ||
+      cleaningSuggestionsProgress.status === "pending" ||
+      cleaningSuggestionsProgress.status === "claimed") &&
+    cleaning.all.length === 0;
+
   /* ---------- Dismissed + applying state ---------- */
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [applyingIssueId, setApplyingIssueId] = useState<string | null>(null);
@@ -568,6 +575,24 @@ export function Step4Quality({
     [auditSections],
   );
 
+  /* ---------- Compute displayScore factoring in unresolved issues ---------- */
+  const displayScore = useMemo(() => {
+    const baseScore = overallQuality ?? 100;
+    let penalty = 0;
+    for (const section of auditSections) {
+      if (section.key === "step-1") continue; // info-only section
+      for (const issue of section.issues) {
+        if (dismissedIds.has(issue.id)) continue; // already dismissed
+        if (issue.infoOnly) continue;
+        // Apply penalty based on severity
+        if (issue.severity === "critical") penalty += 15;
+        else if (issue.severity === "warning") penalty += 8;
+        else penalty += 2; // info
+      }
+    }
+    return Math.max(0, Math.min(100, Math.round(baseScore - penalty)));
+  }, [overallQuality, auditSections, dismissedIds]);
+
   /* ---------- Handlers ---------- */
   const handleDismiss = useCallback((issueId: string) => {
     setDismissedIds((prev) => new Set([...prev, issueId]));
@@ -588,21 +613,31 @@ export function Step4Quality({
       try {
         const customText = customTexts[issue.id]?.trim();
 
+        // Get current user for approved_by field
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        const userId = user?.id;
+        if (!userId) throw new Error("Not authenticated");
+
         if (customText) {
           // Insert custom cleaning operation
+          // Use recode_values with title_case as a safe no-op transform for custom actions
           const { data: opData, error: opErr } = await supabase
             .from("cleaning_operations")
             // @ts-ignore
             .insert({
               dataset_id: datasetId,
-              operation_type: "custom",
+              operation_type: "recode_values",
               column_name: issue.columnName ?? null,
               description: customText,
               reasoning: `User-defined action for: ${issue.title}`,
+              severity: issue.severity,
               confidence: 1.0,
               status: "approved",
+              approved_by: userId,
               priority: 99,
-              parameters: {},
+              parameters: { method: "title_case" },
             })
             .select("id")
             .single();
@@ -610,7 +645,7 @@ export function Step4Quality({
           const { taskId } = await dispatchTask(
             project.id,
             "apply_cleaning_operation",
-            { operation_id: (opData as { id: string }).id, dataset_id: datasetId },
+            { operation_id: (opData as { id: string }).id, dataset_id: datasetId, approved_by: userId },
             datasetId,
           );
           setFixApplyTaskId(taskId);
@@ -618,12 +653,12 @@ export function Step4Quality({
           await supabase
             .from("cleaning_operations")
             // @ts-ignore
-            .update({ status: "approved" })
+            .update({ status: "approved", approved_by: userId })
             .eq("id", issue.matchingOpId);
           const { taskId } = await dispatchTask(
             project.id,
             "apply_cleaning_operation",
-            { operation_id: issue.matchingOpId, dataset_id: datasetId },
+            { operation_id: issue.matchingOpId, dataset_id: datasetId, approved_by: userId },
             datasetId,
           );
           setFixApplyTaskId(taskId);
@@ -660,15 +695,34 @@ export function Step4Quality({
   }, [router, project.id, project.pipeline_status, supabase]);
 
   const handleApproveAll = useCallback(async () => {
-    // Dismiss all active non-info issues and navigate to cleaning
+    // Get current user for approved_by field
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const userId = user?.id;
+
+    // Find all active non-info issues with matchingOpId
     const activeIssues = auditSections.flatMap((s) =>
       s.issues.filter((i) => !dismissedIds.has(i.id) && !i.infoOnly)
     );
+
+    // Approve all matching cleaning operations
+    const fixableIssues = activeIssues.filter((i) => i.matchingOpId);
+    if (fixableIssues.length > 0 && userId) {
+      const opIds = fixableIssues.map((i) => i.matchingOpId!);
+      await supabase
+        .from("cleaning_operations")
+        // @ts-ignore
+        .update({ status: "approved", approved_by: userId })
+        .in("id", opIds);
+    }
+
+    // Dismiss all active issues (both fixable and non-fixable)
     if (activeIssues.length > 0) {
       setDismissedIds((prev) => new Set([...prev, ...activeIssues.map((i) => i.id)]));
     }
     await handleContinue();
-  }, [auditSections, dismissedIds, handleContinue]);
+  }, [auditSections, dismissedIds, handleContinue, supabase]);
 
   /* ================================================================ */
   /*  No dataset guard                                                 */
@@ -822,7 +876,7 @@ export function Step4Quality({
       <Card>
         <CardContent className="flex items-center gap-6 p-6">
           {overallQuality !== null ? (
-            <ScoreRing score={overallQuality} />
+            <ScoreRing score={displayScore} />
           ) : (
             <div className="flex h-24 w-24 items-center justify-center rounded-full border-4 border-muted">
               <span className="text-lg font-bold text-muted-foreground">--</span>
@@ -830,8 +884,8 @@ export function Step4Quality({
           )}
           <div>
             {overallQuality !== null && (
-              <p className={`text-lg font-semibold ${scoreColor(overallQuality)}`}>
-                {scoreVerdict(overallQuality)}
+              <p className={`text-lg font-semibold ${scoreColor(displayScore)}`}>
+                {scoreVerdict(displayScore)}
               </p>
             )}
             <p className="text-sm text-muted-foreground">
@@ -933,12 +987,23 @@ export function Step4Quality({
                             <Button
                               size="sm"
                               onClick={() => handleApplyFix(issue)}
-                              disabled={applyingIssueId === issue.id || (!issue.matchingOpId && !customTexts[issue.id]?.trim())}
+                              disabled={
+                                applyingIssueId === issue.id ||
+                                (!cleaningSuggestionsLoading && !issue.matchingOpId && !customTexts[issue.id]?.trim())
+                              }
                             >
                               {applyingIssueId === issue.id ? (
                                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                              ) : cleaningSuggestionsLoading && !issue.matchingOpId && !customTexts[issue.id]?.trim() ? (
+                                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                               ) : null}
-                              {issue.matchingOpId ? "Apply Fix" : customTexts[issue.id]?.trim() ? "Apply Custom Action" : "Apply Fix"}
+                              {cleaningSuggestionsLoading && !issue.matchingOpId && !customTexts[issue.id]?.trim()
+                                ? "Generating fix…"
+                                : issue.matchingOpId
+                                  ? "Apply Fix"
+                                  : customTexts[issue.id]?.trim()
+                                    ? "Apply Custom Action"
+                                    : "Apply Fix"}
                             </Button>
 
                             {/* Toggle custom input */}
@@ -1014,25 +1079,42 @@ export function Step4Quality({
       </Accordion>
 
       {/* Bottom action row */}
-      {hasResults && (
-        <div className="flex items-center justify-between border-t pt-4">
-          <div className="text-sm text-muted-foreground">
-            {totalIssueCount === 0
-              ? "✓ No issues found"
-              : `${totalIssueCount} issue${totalIssueCount !== 1 ? "s" : ""} found`}
+      {hasResults && (() => {
+        // Count unresolved fixable issues (have matchingOpId, not dismissed)
+        const unresolvedFixable = auditSections.flatMap((s) =>
+          s.issues.filter((i) => !dismissedIds.has(i.id) && !i.infoOnly && i.matchingOpId)
+        );
+        const hasUnresolvedFixable = unresolvedFixable.length > 0;
+
+        return (
+          <div className="flex items-center justify-between border-t pt-4">
+            <div className="text-sm text-muted-foreground">
+              {totalIssueCount === 0
+                ? "No issues found"
+                : `${totalIssueCount} issue${totalIssueCount !== 1 ? "s" : ""} found`}
+              {hasUnresolvedFixable && ` (${unresolvedFixable.length} fixable)`}
+            </div>
+            <div className="flex gap-2">
+              {hasUnresolvedFixable ? (
+                <>
+                  <Button variant="ghost" onClick={handleContinue}>
+                    Skip to Cleaning
+                  </Button>
+                  <Button onClick={handleApproveAll}>
+                    Approve All & Proceed
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </>
+              ) : (
+                <Button onClick={handleContinue}>
+                  Continue to Cleaning
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleContinue}>
-              Continue to Cleaning
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-            <Button onClick={handleApproveAll}>
-              Approve All & Proceed
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
