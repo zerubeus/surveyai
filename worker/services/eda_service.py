@@ -14,7 +14,6 @@ Invariants:
 
 from __future__ import annotations
 
-import io
 import json
 from typing import Any
 
@@ -24,6 +23,7 @@ import structlog
 from scipy import stats
 
 from db import SupabaseDB
+from services.file_utils import read_dataframe_from_bytes
 
 logger = structlog.get_logger()
 
@@ -208,20 +208,12 @@ def _detect_likert_from_data(series: pd.Series) -> bool:
 
 
 def _load_dataframe(db: SupabaseDB, dataset: dict[str, Any]) -> pd.DataFrame:
-    """Load dataset from storage into DataFrame."""
-    file_path: str = dataset["original_file_path"]
-    file_type: str = dataset["file_type"]
-    file_bytes = db.download_file("uploads", file_path)
-    buf = io.BytesIO(file_bytes)
-
-    if file_type in (
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "application/vnd.ms-excel",
-        "xlsx",
-        "xls",
-    ):
-        return pd.read_excel(buf)
-    return pd.read_csv(buf, encoding_errors="replace")
+    """Load dataset from storage into DataFrame with robust parsing."""
+    file_path = dataset.get("working_file_path") or dataset["original_file_path"]
+    bucket = "datasets" if dataset.get("working_file_path") else "uploads"
+    file_type = dataset.get("file_type", "csv")
+    file_bytes = db.download_file(bucket, file_path)
+    return read_dataframe_from_bytes(file_bytes, file_type)
 
 
 def _profile_column(
