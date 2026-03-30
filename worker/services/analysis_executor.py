@@ -240,6 +240,9 @@ def _run_single_analysis(
         df, dep_var, indep_var, final_test, test_result
     )
 
+    # Build chart_data for client-side Recharts rendering
+    chart_data = _build_chart_data(df, dep_var, indep_var, final_test, test_result)
+
     return {
         "test_name": final_test,
         "test_statistic": _safe_float(test_result.get("statistic")),
@@ -262,8 +265,86 @@ def _run_single_analysis(
                 k: _safe_float(v) if isinstance(v, (float, np.floating)) else v
                 for k, v in test_result.items()
             },
+            "chart_data": chart_data,
         }, default=_json_safe)),
     }
+
+
+def _build_chart_data(
+    df: pd.DataFrame,
+    dep_var: str,
+    indep_var: str,
+    test_name: str,
+    test_result: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Build chart_data dict for client-side Recharts rendering."""
+    try:
+        mask = df[dep_var].notna() & df[indep_var].notna()
+        sub = df.loc[mask]
+
+        if test_name in ("chi_square", "fishers_exact"):
+            ct = pd.crosstab(sub[indep_var], sub[dep_var])
+            return {"contingency_table": ct.to_dict()}
+
+        if test_name in ("t_test", "mann_whitney", "welchs_t", "anova", "kruskal_wallis"):
+            numeric_dep = pd.to_numeric(sub[dep_var], errors="coerce")
+            valid = sub.loc[numeric_dep.notna()]
+            numeric_dep = numeric_dep.loc[valid.index]
+            group_stats: dict[str, dict[str, float]] = {}
+            for group_val, group_idx in valid.groupby(indep_var).groups.items():
+                vals = numeric_dep.loc[group_idx].dropna()
+                group_stats[str(group_val)] = {
+                    "mean": round(float(vals.mean()), 4),
+                    "median": round(float(vals.median()), 4),
+                    "std": round(float(vals.std()), 4),
+                    "n": int(len(vals)),
+                }
+            return {"group_stats": group_stats}
+
+        if test_name in ("pearson", "spearman", "kendall_tau"):
+            x = pd.to_numeric(sub[indep_var], errors="coerce").dropna()
+            y = pd.to_numeric(sub[dep_var], errors="coerce").dropna()
+            common = x.index.intersection(y.index)
+            sample_n = min(200, len(common))
+            if sample_n == 0:
+                return None
+            sampled = sub.loc[common].sample(sample_n, random_state=42)
+            scatter = [
+                {"x": round(float(row[indep_var]), 4), "y": round(float(row[dep_var]), 4)}
+                for _, row in sampled.iterrows()
+                if pd.notna(row[indep_var]) and pd.notna(row[dep_var])
+            ]
+            return {"scatter_sample": scatter}
+
+        if test_name == "linear_regression":
+            x = pd.to_numeric(sub[indep_var], errors="coerce").dropna()
+            y = pd.to_numeric(sub[dep_var], errors="coerce").dropna()
+            common = x.index.intersection(y.index)
+            sample_n = min(200, len(common))
+            if sample_n == 0:
+                return None
+            sampled = sub.loc[common].sample(sample_n, random_state=42)
+            scatter = [
+                {"x": round(float(row[indep_var]), 4), "y": round(float(row[dep_var]), 4)}
+                for _, row in sampled.iterrows()
+                if pd.notna(row[indep_var]) and pd.notna(row[dep_var])
+            ]
+            coefficients = test_result.get("coefficients", {})
+            # Get slope from the indep_var coefficient
+            indep_coef = coefficients.get(indep_var, {})
+            slope = indep_coef.get("estimate", 0.0) if isinstance(indep_coef, dict) else 0.0
+            const_coef = coefficients.get("const", {})
+            intercept = const_coef.get("estimate", 0.0) if isinstance(const_coef, dict) else 0.0
+            return {
+                "scatter_sample": scatter,
+                "regression_line": {"slope": round(float(slope), 4), "intercept": round(float(intercept), 4)},
+            }
+
+    except Exception as e:
+        logger.warning("chart_data_build_failed", error=str(e))
+        return None
+
+    return None
 
 
 def _check_assumptions_and_select(

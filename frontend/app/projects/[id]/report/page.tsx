@@ -9,6 +9,7 @@ import { useTaskProgress } from "@/hooks/useTaskProgress";
 import { useReport } from "@/hooks/useReport";
 import { ReportEditor } from "@/components/report/ReportEditor";
 import { ExportPanel } from "@/components/report/ExportPanel";
+import { StepBar } from "@/components/workflow/StepBar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -259,7 +260,7 @@ export default function ReportPage() {
 
   if (loading) {
     return (
-      <div className="container py-10">
+      <div className="container py-6">
         <div className="flex items-center gap-2 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading...
@@ -269,24 +270,23 @@ export default function ReportPage() {
   }
 
   return (
-    <div className="container py-10">
+    <div className="container py-6">
       {/* Breadcrumb */}
-      <div className="mb-6 flex items-center gap-3">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href={`/projects/${projectId}`}>
-            <ChevronLeft className="mr-1 h-4 w-4" />
-            Dashboard
-          </Link>
-        </Button>
-        <span className="text-muted-foreground">/</span>
-        <Button variant="ghost" size="sm" asChild>
-          <Link href={`/projects/${projectId}/analysis`}>
-            Analysis
-          </Link>
-        </Button>
-        <span className="text-muted-foreground">/</span>
-        <span className="text-sm font-medium">Report</span>
+      <div className="mb-4 flex items-center gap-2">
+        <Link
+          href="/dashboard"
+          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ChevronLeft className="mr-1 h-4 w-4" />
+          Dashboard
+        </Link>
+        <span className="text-sm text-muted-foreground">/</span>
+        <h1 className="text-lg font-semibold">{project?.name}</h1>
       </div>
+
+      <StepBar projectId={projectId} />
+
+      <div className="mt-8">
 
       {/* Header */}
       <div className="mb-8">
@@ -402,6 +402,7 @@ export default function ReportPage() {
             />
           )}
         </div>
+      </div>
       </div>
     </div>
   );
