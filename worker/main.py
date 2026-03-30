@@ -11,6 +11,7 @@ import os
 import time
 import signal
 import sys
+from datetime import datetime, timezone, timedelta
 
 import structlog
 from dotenv import load_dotenv
@@ -77,12 +78,13 @@ def enforce_data_retention(db: SupabaseDB) -> None:
 def recover_stale_tasks(db: SupabaseDB) -> None:
     """Reset tasks that were claimed but haven't progressed past 0% in N minutes."""
     try:
+        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=STALE_TASK_TIMEOUT_MINUTES)).isoformat()
         stale = (
             db.client.table("tasks")
             .select("id, task_type, claimed_by, claimed_at")
             .eq("status", "claimed")
             .lt("progress", 5)
-            .lt("claimed_at", f"now() - interval '{STALE_TASK_TIMEOUT_MINUTES} minutes'")
+            .lt("claimed_at", cutoff)
             .execute()
             .data or []
         )
