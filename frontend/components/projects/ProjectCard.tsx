@@ -44,10 +44,22 @@ function parseDescription(raw: string | null): { text: string | null; tags: stri
   return { text: raw, tags: [] };
 }
 
+// Step 2 (Upload) is hidden from UI — exclude from count
+const VISIBLE_STEPS = ["1", "3", "4", "5", "6", "7", "8"];
+const STEP_NAMES: Record<string, string> = {
+  "1": "Project Brief",
+  "3": "Map Columns",
+  "4": "Quality",
+  "5": "Cleaning",
+  "6": "Analysis",
+  "7": "Visualisation",
+  "8": "Report",
+};
+
 function countCompletedSteps(pipelineStatus: unknown): number {
   if (!pipelineStatus || typeof pipelineStatus !== "object") return 0;
-  return Object.values(pipelineStatus as Record<string, string>).filter(
-    (v) => v === "completed"
+  return VISIBLE_STEPS.filter(
+    (k) => (pipelineStatus as Record<string, string>)[k] === "completed"
   ).length;
 }
 
@@ -68,7 +80,10 @@ export function ProjectCard({ project, onDeleted, qualityScore }: ProjectCardPro
   const completedSteps = countCompletedSteps(
     (project as unknown as { pipeline_status?: unknown }).pipeline_status
   );
-  const currentStep = (project as unknown as { current_step?: number }).current_step ?? 1;
+  const currentStepNum = (project as unknown as { current_step?: number }).current_step ?? 1;
+  // Map DB step number to visible position (step 2 hidden → step 3 is visible step 2, etc.)
+  const visibleStepNum = currentStepNum <= 1 ? 1 : currentStepNum <= 2 ? 1 : currentStepNum - 1;
+  const currentStepName = STEP_NAMES[String(currentStepNum)] ?? `Step ${visibleStepNum}`;
   const progressPercent = Math.round((completedSteps / totalSteps) * 100);
 
   async function handleDelete(e: React.MouseEvent) {
@@ -121,7 +136,7 @@ export function ProjectCard({ project, onDeleted, qualityScore }: ProjectCardPro
             <div className="mb-2 space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">
-                  Step {currentStep} of {totalSteps}
+                  {currentStepName} ({visibleStepNum}/{totalSteps})
                 </span>
                 <span className="text-xs text-muted-foreground">{progressPercent}%</span>
               </div>

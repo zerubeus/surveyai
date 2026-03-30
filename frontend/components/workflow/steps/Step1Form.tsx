@@ -292,10 +292,12 @@ export function Step1Form({ project }: Step1FormProps) {
 
     const supabase = createBrowserClient();
 
+    // Step 2 (Upload) is now handled at project creation — skip directly to step 3 (Map Columns)
     const newPipeline: PipelineStatus = {
       ...(project.pipeline_status as PipelineStatus),
       "1": "completed",
-      "2": "active",
+      "2": "completed",
+      "3": "active",
     };
 
     const { error } = await supabase
@@ -309,7 +311,7 @@ export function Step1Form({ project }: Step1FormProps) {
         geographic_scope: JSON.stringify(geoScope),
         research_questions: researchQuestions as unknown as Json,
         additional_context: JSON.stringify({ audience: audience || null }),
-        current_step: 2,
+        current_step: 3,
         pipeline_status: newPipeline as unknown as Json,
       })
       .eq("id", project.id);
@@ -321,7 +323,7 @@ export function Step1Form({ project }: Step1FormProps) {
     }
 
     router.refresh();
-    router.push(`/projects/${project.id}/step/2`);
+    router.push(`/projects/${project.id}/step/3`);
   };
 
   // -- selected sampling helper text --

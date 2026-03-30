@@ -26,7 +26,6 @@ import type { PipelineStatus, StepStatus } from "@/lib/types/database";
 
 const STEPS = [
   { num: 1, name: "Project Brief", icon: FileText },
-  { num: 2, name: "Upload", icon: Upload },
   { num: 3, name: "Map Columns", icon: Columns },
   { num: 4, name: "Quality", icon: BarChart3 },
   { num: 5, name: "Cleaning", icon: Sparkles },

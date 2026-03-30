@@ -209,6 +209,7 @@ export default function NewProjectPage() {
       // If AI fails, we still continue with defaults
 
       // Step 2: Create project with ai_prefill in additional_context
+      // Upload step (step 2) is auto-completed at project creation
       setStatus("creating");
       setStatusMsg("Setting up your project…");
 
@@ -247,9 +248,10 @@ export default function NewProjectPage() {
             ),
           }),
           current_step: 1,
+          // Step 2 (Upload) is done at project creation — mark completed immediately
           pipeline_status: {
             "1": "active",
-            "2": "locked",
+            "2": "completed",
             "3": "locked",
             "4": "locked",
             "5": "locked",
@@ -266,6 +268,41 @@ export default function NewProjectPage() {
       }
 
       const project = projectRaw as { id: string };
+
+      // Step 3: Upload dataset file to Supabase Storage + create dataset record
+      setStatusMsg("Uploading dataset…");
+      try {
+        const ext = csvFile.name.split(".").pop() ?? "csv";
+        const baseName = csvFile.name.replace(/\.[^/.]+$/, "");
+        const storagePath = `${userId}/${project.id}/${baseName}_${Date.now()}.${ext}`;
+        const fileTypeMap: Record<string, string> = {
+          csv: "csv", xls: "xls", xlsx: "xlsx",
+        };
+        const fileType = fileTypeMap[ext.toLowerCase()] ?? "csv";
+
+        const { error: uploadError } = await supabase.storage
+          .from("uploads")
+          .upload(storagePath, csvFile);
+
+        if (!uploadError) {
+          await (supabase as unknown as {
+            from: (t: string) => { insert: (d: unknown) => Promise<unknown> }
+          })
+            .from("datasets")
+            .insert({
+              project_id: project.id,
+              uploaded_by: userId,
+              name: csvFile.name,
+              original_file_path: storagePath,
+              file_type: fileType,
+              file_size_bytes: csvFile.size,
+              status: "uploaded",
+            });
+        }
+      } catch {
+        // Non-fatal — user can re-upload in step 2 if needed
+      }
+
       router.push(`/projects/${project.id}/step/1`);
       router.refresh();
     } catch (err) {
