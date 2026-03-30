@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 from typing import Any
 
 import numpy as np
@@ -23,6 +24,97 @@ from scipy import stats
 from db import SupabaseDB
 
 logger = structlog.get_logger()
+
+# Encodings to try in order
+ENCODINGS_TO_TRY = ["utf-8", "utf-8-sig", "latin-1", "cp1252", "iso-8859-1"]
+
+
+def _safe_str(val: Any) -> str:
+    """Safely convert any value to string, handling slices, NaN, and other edge cases."""
+    if isinstance(val, slice):
+        return ""
+    if val is None:
+        return ""
+    try:
+        if pd.isna(val):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    try:
+        return str(val).strip()
+    except Exception:
+        return ""
+
+
+def _flatten_multiindex_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Flatten multi-level column headers into single-level strings."""
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = [
+            " ".join(_safe_str(part) for part in col).strip()
+            for col in df.columns
+        ]
+    else:
+        df.columns = [
+            f"Column_{i}" if isinstance(col, slice) else _safe_str(col)
+            for i, col in enumerate(df.columns)
+        ]
+    return df
+
+
+def _clean_column_names(columns: list[Any]) -> list[str]:
+    """Clean column names: strip, remove special chars, deduplicate."""
+    seen: dict[str, int] = {}
+    result: list[str] = []
+
+    for i, col in enumerate(columns):
+        if isinstance(col, slice):
+            clean = f"Column_{i}"
+        elif isinstance(col, tuple):
+            clean = " ".join(_safe_str(part) for part in col).strip()
+        else:
+            clean = _safe_str(col)
+
+        clean = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', clean)
+        clean = re.sub(r'[\r\n]+', ' ', clean)
+        clean = re.sub(r'\s+', ' ', clean).strip()[:100]
+
+        if not clean:
+            clean = f"unnamed_column_{i}"
+
+        if clean in seen:
+            seen[clean] += 1
+            clean = f"{clean}_{seen[clean]}"
+        else:
+            seen[clean] = 1
+
+        result.append(clean)
+
+    return result
+
+
+def _load_csv_robust(file_bytes: bytes) -> pd.DataFrame:
+    """Load CSV with robust encoding and delimiter detection."""
+    for encoding in ENCODINGS_TO_TRY:
+        try:
+            df = pd.read_csv(
+                io.BytesIO(file_bytes),
+                sep=None,
+                engine="python",
+                encoding=encoding,
+                on_bad_lines="skip",
+            )
+            return df
+        except (UnicodeDecodeError, pd.errors.ParserError):
+            continue
+        except Exception:
+            continue
+
+    # Fallback: latin-1 with comma separator
+    return pd.read_csv(
+        io.BytesIO(file_bytes),
+        encoding="latin-1",
+        on_bad_lines="skip",
+    )
 
 # Significance threshold
 ALPHA = 0.05
@@ -122,16 +214,21 @@ def run_bias_detection(db: SupabaseDB, task_id: str, payload: dict[str, Any]) ->
 
 
 def _load_dataframe(db: SupabaseDB, dataset: dict[str, Any]) -> pd.DataFrame:
-    """Load dataset from storage into DataFrame."""
+    """Load dataset from storage into DataFrame with robust handling."""
     file_path: str = dataset["original_file_path"]
     file_type: str = dataset["file_type"]
     file_bytes = db.download_file("uploads", file_path)
-    buf = io.BytesIO(file_bytes)
+
     if file_type in ("xlsx", "xls",
                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                       "application/vnd.ms-excel"):
-        return pd.read_excel(buf)
-    return pd.read_csv(buf, encoding_errors="replace")
+        df = pd.read_excel(io.BytesIO(file_bytes))
+    else:
+        df = _load_csv_robust(file_bytes)
+
+    df = _flatten_multiindex_columns(df)
+    df.columns = _clean_column_names(list(df.columns))
+    return df
 
 
 def _check_non_response_bias(
