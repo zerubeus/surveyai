@@ -347,6 +347,7 @@ export function Step6Results({
         .eq("id", projectId);
 
       router.refresh();
+      router.push(`/projects/${projectId}/report`);
     } catch {
       toast("Failed to proceed", { variant: "error" });
     } finally {
