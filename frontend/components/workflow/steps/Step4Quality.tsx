@@ -435,7 +435,7 @@ export function Step4Quality({
   } = useQualityResults(datasetId);
 
   /* ---------- Cleaning suggestions (Realtime) ---------- */
-  const cleaning = useCleaningSuggestions(datasetId);
+  const cleaning = useCleaningSuggestions(datasetId, project.id);
 
   /* ---------- Column mappings for role badges ---------- */
   const [mappingsByColumn, setMappingsByColumn] = useState<

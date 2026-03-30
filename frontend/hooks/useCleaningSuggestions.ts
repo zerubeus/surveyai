@@ -31,8 +31,15 @@ const initialState: CleaningSuggestionsState = {
 /**
  * Fetch cleaning_operations for a dataset and subscribe to Realtime updates.
  * Categorizes operations by status for the cleaning UI.
+ *
+ * When projectId is provided, fetches ops for ALL datasets in the project.
+ * This is needed because cleaning ops may live on a parent dataset after a fix
+ * creates a new dataset version.
  */
-export function useCleaningSuggestions(datasetId: string | null) {
+export function useCleaningSuggestions(
+  datasetId: string | null,
+  projectId: string | null = null,
+) {
   const [state, setState] = useState<CleaningSuggestionsState>(initialState);
 
   const categorize = useCallback((data: CleaningOperation[]) => {
@@ -51,10 +58,24 @@ export function useCleaningSuggestions(datasetId: string | null) {
   const refetch = useCallback(async () => {
     if (!datasetId) return;
     const supabase = createBrowserClient();
+
+    // Get all dataset IDs for this project if projectId is provided
+    let datasetIds: string[] = [datasetId];
+    if (projectId) {
+      const { data: datasets } = await supabase
+        .from("datasets")
+        .select("id")
+        .eq("project_id", projectId)
+        .returns<{ id: string }[]>();
+      if (datasets && datasets.length > 0) {
+        datasetIds = datasets.map((d) => d.id);
+      }
+    }
+
     const { data, error } = await supabase
       .from("cleaning_operations")
       .select("*")
-      .eq("dataset_id", datasetId)
+      .in("dataset_id", datasetIds)
       .order("priority", { ascending: true });
 
     if (error) {
@@ -62,7 +83,7 @@ export function useCleaningSuggestions(datasetId: string | null) {
       return;
     }
     categorize((data ?? []) as CleaningOperation[]);
-  }, [datasetId, categorize]);
+  }, [datasetId, projectId, categorize]);
 
   useEffect(() => {
     if (!datasetId) {
@@ -75,16 +96,16 @@ export function useCleaningSuggestions(datasetId: string | null) {
 
     const supabase = createBrowserClient();
 
-    // Subscribe to real-time changes
+    // Subscribe to real-time changes on the table (no filter so we catch ops on any dataset)
+    // We refetch all project datasets on any change anyway
     const channel = supabase
-      .channel(`cleaning-ops-${datasetId}`)
+      .channel(`cleaning-ops-project-${projectId ?? datasetId}`)
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "cleaning_operations",
-          filter: `dataset_id=eq.${datasetId}`,
         },
         () => {
           // Refetch on any change to keep categories in sync
@@ -96,7 +117,7 @@ export function useCleaningSuggestions(datasetId: string | null) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [datasetId, refetch]);
+  }, [datasetId, projectId, refetch]);
 
   return {
     ...state,
