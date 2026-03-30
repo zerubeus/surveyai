@@ -10,7 +10,9 @@ frontend/out/
 .env
 .env.local
 .env.*.local
+.env.production
 frontend/.env.local
+frontend/.env.production
 worker/.env
 
 # Python
