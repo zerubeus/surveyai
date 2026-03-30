@@ -603,30 +603,6 @@ export function Step5Analysis({
         weightColumnName={weightColumnName}
       />
 
-      {/* CTA when all plans already completed */}
-      {allCompleted && (
-        <Card className="border-green-200 bg-green-50">
-          <CardContent className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="h-5 w-5 text-green-600" />
-              <div>
-                <p className="font-medium text-green-800">Analysis complete</p>
-                <p className="text-sm text-green-700">
-                  All {plans.length} test{plans.length > 1 ? "s" : ""} ran successfully. Results are ready.
-                </p>
-              </div>
-            </div>
-            <Button
-              onClick={() => { router.refresh(); router.push(`/projects/${projectId}/step/7`); }}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              View Results
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Top action bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-4">
@@ -831,6 +807,16 @@ export function Step5Analysis({
               </CardContent>
             </Card>
           )}
+        </div>
+      )}
+
+      {/* Continue to Visualisation — visible when all plans completed */}
+      {allCompleted && (
+        <div className="flex justify-end border-t pt-4 mt-4">
+          <Button onClick={() => { router.refresh(); router.push(`/projects/${projectId}/step/7`); }}>
+            Continue to Visualisation
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
         </div>
       )}
     </div>

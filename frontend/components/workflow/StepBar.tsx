@@ -14,6 +14,7 @@ import {
   BarChart3,
   Sparkles,
   ClipboardCheck,
+  PieChart,
   FileOutput,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -30,7 +31,8 @@ const STEPS = [
   { num: 4, name: "Quality", icon: BarChart3 },
   { num: 5, name: "Cleaning", icon: Sparkles },
   { num: 6, name: "Analysis", icon: ClipboardCheck },
-  { num: 7, name: "Report", icon: FileOutput },
+  { num: 7, name: "Visualisation", icon: PieChart },
+  { num: 8, name: "Report", icon: FileOutput },
 ] as const;
 
 const DEFAULT_PIPELINE: PipelineStatus = {
@@ -41,6 +43,7 @@ const DEFAULT_PIPELINE: PipelineStatus = {
   "5": "locked",
   "6": "locked",
   "7": "locked",
+  "8": "locked",
 };
 
 /* ------------------------------------------------------------------ */
@@ -65,9 +68,10 @@ interface StepBarProps {
 export function StepBar({ projectId, initialPipelineStatus }: StepBarProps) {
   const pathname = usePathname();
 
-  // Derive current step from URL — /projects/[id]/step/N → N
+  // Derive current step from URL — /projects/[id]/step/N → N, /report → 8
   const urlStepMatch = pathname?.match(/\/step\/(\d+)/);
-  const activeStep = urlStepMatch ? parseInt(urlStepMatch[1], 10) : 1;
+  const isReportPage = pathname?.endsWith("/report");
+  const activeStep = isReportPage ? 8 : urlStepMatch ? parseInt(urlStepMatch[1], 10) : 1;
 
   // Pipeline status — start with SSR value, then refresh client-side
   const [pipelineStatus, setPipelineStatus] = useState<PipelineStatus>(
@@ -169,10 +173,14 @@ export function StepBar({ projectId, initialPipelineStatus }: StepBarProps) {
           );
 
           if (isClickable) {
+            const href =
+              step.num === 8
+                ? `/projects/${projectId}/report`
+                : `/projects/${projectId}/step/${step.num}`;
             return (
               <Link
                 key={step.num}
-                href={`/projects/${projectId}/step/${step.num}`}
+                href={href as never}
                 className="contents"
                 title={step.name}
               >
