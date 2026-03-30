@@ -148,10 +148,15 @@ def generate_analysis_plan(
         db.delete("analysis_plans", {"id": plan_id})
 
     # Step 6: Insert proposals as analysis_plans rows
-    # created_by is injected by main.py from the task record (always a valid UUID)
+    # created_by is injected by main.py from the task record (always a valid UUID).
+    # Fallback: look up the task's created_by directly from the DB if not in payload.
     created_by = payload.get("created_by")
     if not created_by:
-        raise ValueError("created_by is required in payload — must be a valid user UUID")
+        task_rows = db.select("tasks", filters={"id": task_id})
+        if task_rows:
+            created_by = str(task_rows[0].get("created_by", ""))
+    if not created_by:
+        raise ValueError("created_by is required — task row has no created_by UUID")
     inserted = 0
 
     for proposal in proposals:
