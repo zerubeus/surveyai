@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/browser";
 import { useCleaningSuggestions } from "@/hooks/useCleaningSuggestions";
-import { useDispatchTask } from "@/hooks/useDispatchTask";
 import { useTaskProgress } from "@/hooks/useTaskProgress";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,26 +11,15 @@ import { Progress } from "@/components/ui/progress";
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import {
-  ArrowLeft,
   ArrowRight,
-  Check,
   CheckCircle2,
   Loader2,
   RotateCcw,
-  X,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
-import type { Tables, Json, Enums } from "@/lib/types/database";
+import type { Tables, Json } from "@/lib/types/database";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -48,88 +36,8 @@ export interface Step5CleaningProps {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Category config                                                    */
+/*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
-
-interface CleaningCategory {
-  key: string;
-  stepNum: number;
-  name: string;
-  opTypes: string[];
-  descriptionFilter?: (op: CleaningOperation) => boolean;
-}
-
-const CATEGORIES: CleaningCategory[] = [
-  {
-    key: "cat-1",
-    stepNum: 1,
-    name: "Duplicate Removal",
-    opTypes: ["remove_duplicates"],
-  },
-  {
-    key: "cat-2",
-    stepNum: 2,
-    name: "Response Quality",
-    opTypes: ["custom"],
-    descriptionFilter: (op) =>
-      op.operation_type === "custom" &&
-      op.description.toLowerCase().includes("response_quality"),
-  },
-  {
-    key: "cat-3",
-    stepNum: 3,
-    name: "Standardization",
-    opTypes: ["fix_encoding", "recode_values", "rename_column", "fix_data_type"],
-  },
-  {
-    key: "cat-4",
-    stepNum: 4,
-    name: "Missing Value Treatment",
-    opTypes: ["standardize_missing", "impute_value"],
-  },
-  {
-    key: "cat-5",
-    stepNum: 5,
-    name: "Outlier Treatment",
-    opTypes: ["fix_outlier"],
-  },
-  {
-    key: "cat-6",
-    stepNum: 6,
-    name: "Skip Logic Fixes",
-    opTypes: ["fix_skip_logic"],
-  },
-  {
-    key: "cat-7",
-    stepNum: 7,
-    name: "Custom Operations",
-    opTypes: ["custom"],
-    // Only custom ops NOT already matched by cat-2 (response_quality)
-    descriptionFilter: (op) =>
-      op.operation_type === "custom" &&
-      !op.description.toLowerCase().includes("response_quality"),
-  },
-];
-
-function categorizeOp(op: CleaningOperation): string {
-  // Response quality custom ops
-  if (
-    op.operation_type === "custom" &&
-    op.description.toLowerCase().includes("response_quality")
-  ) {
-    return "cat-2";
-  }
-  // Custom (general)
-  if (op.operation_type === "custom") {
-    return "cat-7";
-  }
-  for (const cat of CATEGORIES) {
-    if (cat.opTypes.includes(op.operation_type) && cat.key !== "cat-2" && cat.key !== "cat-7") {
-      return cat.key;
-    }
-  }
-  return "cat-7"; // fallback
-}
 
 const OP_TYPE_LABELS: Record<string, string> = {
   remove_duplicates: "Remove duplicate rows",
@@ -168,14 +76,12 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
   const datasetId = dataset?.id ?? null;
 
   const cleaning = useCleaningSuggestions(datasetId);
-  const { dispatchTask } = useDispatchTask();
 
-  /* ---------- Apply / rollback task tracking ---------- */
+  /* ---------- Rollback task tracking ---------- */
   const [actioningOpId, setActioningOpId] = useState<string | null>(null);
   const [actionTaskId, setActionTaskId] = useState<string | null>(null);
   const actionProgress = useTaskProgress(actionTaskId);
   const [isFinalizing, setIsFinalizing] = useState(false);
-  const [applyAllRunning, setApplyAllRunning] = useState(false);
 
   useEffect(() => {
     if (
@@ -183,86 +89,22 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
       actionProgress.status === "failed"
     ) {
       if (actionProgress.status === "completed") {
-        toast("Operation completed", { variant: "success" });
+        toast("Operation rolled back", { variant: "success" });
       } else {
-        toast("Operation failed", { variant: "error" });
+        toast("Rollback failed", { variant: "error" });
       }
       setActioningOpId(null);
       setActionTaskId(null);
     }
   }, [actionProgress.status]);
 
-  /* ---------- Computed: ops by category ---------- */
-  const opsByCategory = useMemo(() => {
-    const map: Record<string, CleaningOperation[]> = {};
-    for (const cat of CATEGORIES) {
-      map[cat.key] = [];
-    }
-    for (const op of cleaning.all) {
-      const catKey = categorizeOp(op);
-      if (!map[catKey]) map[catKey] = [];
-      map[catKey].push(op);
-    }
-    return map;
-  }, [cleaning.all]);
-
-  const totalApplied = useMemo(
-    () => cleaning.all.filter((o) => o.status === "applied").length,
-    [cleaning.all],
-  );
+  /* ---------- Computed ---------- */
   const totalPending = useMemo(
     () => cleaning.all.filter((o) => o.status === "pending" || o.status === "approved").length,
     [cleaning.all],
   );
-  const totalRejected = useMemo(
-    () => cleaning.all.filter((o) => o.status === "rejected").length,
-    [cleaning.all],
-  );
 
   /* ---------- Handlers ---------- */
-  const handleApply = useCallback(
-    async (op: CleaningOperation) => {
-      if (!datasetId) return;
-      setActioningOpId(op.id);
-      try {
-        await supabase
-          .from("cleaning_operations")
-          // @ts-ignore
-          .update({ status: "approved" as Enums<"cleaning_op_status"> })
-          .eq("id", op.id);
-        const { taskId } = await dispatchTask(
-          projectId,
-          "apply_cleaning_operation",
-          { operation_id: op.id, dataset_id: datasetId },
-          datasetId,
-        );
-        setActionTaskId(taskId);
-      } catch {
-        toast("Failed to apply operation", { variant: "error" });
-        setActioningOpId(null);
-      }
-    },
-    [projectId, datasetId, dispatchTask, supabase],
-  );
-
-  const handleSkip = useCallback(
-    async (op: CleaningOperation) => {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error } = await (supabase as any)
-          .from("cleaning_operations")
-          .update({ status: "rejected" })
-          .eq("id", op.id);
-        if (error) throw error;
-        toast("Operation skipped", { variant: "success" });
-      } catch (err) {
-        console.error("Failed to skip operation:", err);
-        toast("Failed to skip operation", { variant: "error" });
-      }
-    },
-    [supabase],
-  );
-
   const handleRollback = useCallback(
     async (op: CleaningOperation) => {
       setActioningOpId(op.id);
@@ -282,34 +124,6 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
     },
     [supabase],
   );
-
-  const handleApplyAllPending = useCallback(async () => {
-    if (!datasetId) return;
-    setApplyAllRunning(true);
-    const pendingOps = cleaning.all.filter(
-      (o) => o.status === "pending" || o.status === "approved",
-    );
-    try {
-      for (const op of pendingOps) {
-        await supabase
-          .from("cleaning_operations")
-          // @ts-ignore
-          .update({ status: "approved" as Enums<"cleaning_op_status"> })
-          .eq("id", op.id);
-        await dispatchTask(
-          projectId,
-          "apply_cleaning_operation",
-          { operation_id: op.id, dataset_id: datasetId },
-          datasetId,
-        );
-      }
-      toast(`Applied ${pendingOps.length} operations`, { variant: "success" });
-    } catch {
-      toast("Some operations failed to apply", { variant: "error" });
-    } finally {
-      setApplyAllRunning(false);
-    }
-  }, [cleaning.all, datasetId, projectId, dispatchTask, supabase]);
 
   const handleFinalize = useCallback(async () => {
     setIsFinalizing(true);
@@ -371,84 +185,21 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
   }
 
   /* ================================================================ */
-  /*  No operations yet                                               */
+  /*  Simplified: Changes Applied Summary                              */
   /* ================================================================ */
-  if (cleaning.all.length === 0) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-bold">Data Cleaning</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            No cleaning operations found. Go back to the Quality step to review issues and apply fixes.
-          </p>
-        </div>
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <CheckCircle2 className="mb-4 h-12 w-12 text-muted-foreground/50" />
-            <p className="mb-2 text-sm font-medium">No cleaning operations</p>
-            <p className="mb-6 text-sm text-muted-foreground text-center max-w-sm">
-              Cleaning suggestions are generated during the Quality Assessment step.
-              Go back to review quality issues and apply fixes there.
-            </p>
-            <Button variant="outline" onClick={() => router.push(`/projects/${projectId}/step/4`)}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Quality Assessment
-            </Button>
-          </CardContent>
-        </Card>
-        <div className="flex justify-end border-t pt-4">
-          <Button onClick={handleFinalize} disabled={isFinalizing}>
-            {isFinalizing ? (
-              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Finalizing...</>
-            ) : (
-              <>Continue to Analysis <ArrowRight className="ml-2 h-4 w-4" /></>
-            )}
-          </Button>
-        </div>
-      </div>
-    );
-  }
 
-  /* ================================================================ */
-  /*  Main: 7-category cleaning audit view                            */
-  /* ================================================================ */
+  // Applied operations for timeline view
+  const appliedOps = cleaning.all.filter((o) => o.status === "applied");
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">Data Cleaning</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Review and manage cleaning operations by category.
-          </p>
-        </div>
+      <div>
+        <h2 className="text-2xl font-bold">Changes Applied</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Review the data transformations that have been applied to your dataset.
+        </p>
       </div>
-
-      {/* Summary stats bar */}
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-4 p-4">
-          <div className="flex items-center gap-2 text-sm">
-            <Badge className="bg-green-600 text-white">{totalApplied} applied</Badge>
-            <Badge variant="outline">{totalPending} pending review</Badge>
-            <Badge variant="secondary">{totalRejected} skipped</Badge>
-          </div>
-          <div className="ml-auto">
-            {totalPending > 0 && (
-              <Button
-                size="sm"
-                onClick={handleApplyAllPending}
-                disabled={applyAllRunning}
-              >
-                {applyAllRunning && (
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                )}
-                Apply All Pending ({totalPending})
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Action progress bar */}
       {actioningOpId && (
@@ -460,130 +211,118 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
         </Card>
       )}
 
-      {/* 7-category accordion */}
-      <Accordion type="multiple" className="space-y-2">
-        {CATEGORIES.map((cat) => {
-          const ops = opsByCategory[cat.key] ?? [];
-          const appliedOps = ops.filter((o) => o.status === "applied");
-          const pendingOps = ops.filter((o) => o.status === "pending" || o.status === "approved");
-          const otherOps = ops.filter(
-            (o) => o.status !== "applied" && o.status !== "pending" && o.status !== "approved",
-          );
-
-          return (
-            <AccordionItem
-              key={cat.key}
-              value={cat.key}
-              className="rounded-lg border"
-            >
-              <AccordionTrigger className="px-4 hover:no-underline">
-                <div className="flex flex-1 items-center gap-3 text-left">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                    {cat.stepNum}
-                  </span>
-                  <span className="text-sm font-medium">{cat.name}</span>
-                  {ops.length > 0 ? (
-                    <div className="flex items-center gap-1.5">
-                      {appliedOps.length > 0 && (
-                        <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs">
-                          {appliedOps.length} applied
-                        </Badge>
-                      )}
-                      {pendingOps.length > 0 && (
-                        <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs">
-                          {pendingOps.length} pending
-                        </Badge>
-                      )}
-                    </div>
-                  ) : (
-                    <Badge className="bg-green-50 text-green-700 border border-green-200 text-xs">
-                      ✓ All clear
-                    </Badge>
-                  )}
+      {/* Summary card */}
+      <Card>
+        <CardContent className="p-6">
+          {appliedOps.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8">
+              <CheckCircle2 className="mb-4 h-12 w-12 text-green-500" />
+              <p className="text-lg font-medium">No changes needed</p>
+              <p className="mt-1 text-sm text-muted-foreground text-center max-w-sm">
+                Your dataset passed quality checks without requiring any modifications.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
+                  <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
                 </div>
-              </AccordionTrigger>
-              <AccordionContent className="px-4 pb-4">
-                {ops.length === 0 && (
-                  <div className="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-900 dark:bg-green-950/20">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600" />
-                    <div>
-                      <p className="text-sm font-medium text-green-800 dark:text-green-200">No issues detected</p>
-                      <p className="text-xs text-green-700 dark:text-green-300 mt-0.5">
-                        {cat.key === "cat-1" && "No duplicate rows or identifier conflicts found in the dataset."}
-                        {cat.key === "cat-2" && "No response quality issues detected — no speeders, straightliners, or bot patterns identified."}
-                        {cat.key === "cat-3" && "All variables are consistently coded. No encoding inconsistencies or recoding needed."}
-                        {cat.key === "cat-4" && "Missing data is within acceptable limits across all variables."}
-                        {cat.key === "cat-5" && "No statistical outliers detected outside acceptable bounds."}
-                        {cat.key === "cat-6" && "All skip logic routing is consistent with the survey instrument."}
-                        {cat.key === "cat-7" && "No custom cleaning operations were applied."}
-                      </p>
+                <div>
+                  <p className="font-medium">{appliedOps.length} transformation{appliedOps.length !== 1 ? "s" : ""} applied</p>
+                  <p className="text-sm text-muted-foreground">Your data has been cleaned and is ready for analysis</p>
+                </div>
+              </div>
+
+              {/* Timeline of applied operations */}
+              <div className="space-y-2 pt-4 border-t">
+                {appliedOps.map((op, idx) => {
+                  const opTypeIcon = op.operation_type === "remove_duplicates" ? "🗑" :
+                    op.operation_type === "impute_value" ? "📊" :
+                    op.operation_type === "fix_outlier" ? "📈" :
+                    op.operation_type === "recode_values" ? "🔄" :
+                    op.operation_type === "standardize_missing" ? "⚪" :
+                    op.operation_type === "fix_data_type" ? "🔢" : "✨";
+
+                  const afterStats = op.after_snapshot as Record<string, number> | null;
+                  const beforeStats = op.before_snapshot as Record<string, number> | null;
+                  const rowsAffected = beforeStats?.row_count && afterStats?.row_count
+                    ? beforeStats.row_count - afterStats.row_count
+                    : op.affected_rows_estimate;
+
+                  return (
+                    <div
+                      key={op.id}
+                      className="flex items-start gap-3 rounded-lg border p-3 bg-muted/30"
+                    >
+                      <span className="text-lg">{opTypeIcon}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium truncate">{op.description || plainLanguage(op)}</p>
+                          {op.column_name && (
+                            <code className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs font-mono text-muted-foreground">
+                              {op.column_name}
+                            </code>
+                          )}
+                        </div>
+                        {rowsAffected != null && rowsAffected > 0 && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {rowsAffected.toLocaleString()} rows affected
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="shrink-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => handleRollback(op)}
+                        disabled={actioningOpId === op.id}
+                      >
+                        {actioningOpId === op.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RotateCcw className="h-3.5 w-3.5" />
+                        )}
+                        <span className="ml-1.5">Undo</span>
+                      </Button>
                     </div>
-                  </div>
-                )}
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-                {/* Applied operations */}
-                {appliedOps.length > 0 && (
-                  <div className="space-y-2 mb-4">
-                    <p className="text-xs font-semibold text-green-700 dark:text-green-400">
-                      Applied ({appliedOps.length})
-                    </p>
-                    {appliedOps.map((op) => (
-                      <OpCard
-                        key={op.id}
-                        op={op}
-                        actioningOpId={actioningOpId}
-                        onRollback={handleRollback}
-                      />
-                    ))}
-                  </div>
-                )}
+      {/* Pending operations notice (if any remain) */}
+      {totalPending > 0 && (
+        <Card className="border-yellow-200 dark:border-yellow-900">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <Badge variant="outline" className="shrink-0">{totalPending} pending</Badge>
+              <p className="text-sm text-muted-foreground">
+                Some suggested fixes were not applied.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="ml-auto shrink-0"
+                onClick={() => router.push(`/projects/${projectId}/step/4`)}
+              >
+                Review in Quality
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-                {/* Pending operations */}
-                {pendingOps.length > 0 && (
-                  <div className="space-y-2 mb-4">
-                    <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">
-                      Pending Review ({pendingOps.length})
-                    </p>
-                    {pendingOps.map((op) => (
-                      <OpCard
-                        key={op.id}
-                        op={op}
-                        actioningOpId={actioningOpId}
-                        onApply={handleApply}
-                        onSkip={handleSkip}
-                      />
-                    ))}
-                  </div>
-                )}
-
-                {/* Rejected/undone operations */}
-                {otherOps.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground">
-                      Skipped / Rolled Back ({otherOps.length})
-                    </p>
-                    {otherOps.map((op) => (
-                      <OpCard
-                        key={op.id}
-                        op={op}
-                        actioningOpId={actioningOpId}
-                      />
-                    ))}
-                  </div>
-                )}
-              </AccordionContent>
-            </AccordionItem>
-          );
-        })}
-      </Accordion>
-
-      {/* Finalize */}
+      {/* Proceed to Analysis */}
       <div className="flex justify-end border-t pt-4">
         <Button onClick={handleFinalize} disabled={isFinalizing}>
           {isFinalizing ? (
-            <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Finalizing...</>
+            <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Proceeding...</>
           ) : (
-            <>Finalize &amp; Continue to Analysis <ArrowRight className="ml-2 h-4 w-4" /></>
+            <>Proceed to Analysis <ArrowRight className="ml-2 h-4 w-4" /></>
           )}
         </Button>
       </div>
@@ -591,189 +330,3 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
   );
 }
 
-/* ================================================================== */
-/*  Sub-components                                                     */
-/* ================================================================== */
-
-function StatusBadge({ status }: { status: string }) {
-  if (status === "applied")
-    return <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs">applied</Badge>;
-  if (status === "rejected")
-    return <Badge className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 text-xs">skipped</Badge>;
-  if (status === "undone")
-    return <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 text-xs">rolled back</Badge>;
-  return <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs">pending</Badge>;
-}
-
-function OpCard({
-  op,
-  actioningOpId,
-  onApply,
-  onSkip,
-  onRollback,
-}: {
-  op: CleaningOperation;
-  actioningOpId: string | null;
-  onApply?: (op: CleaningOperation) => void;
-  onSkip?: (op: CleaningOperation) => void;
-  onRollback?: (op: CleaningOperation) => void;
-}) {
-  const isActioning = actioningOpId === op.id;
-  const beforeData = op.before_snapshot as Record<string, Json>[] | null;
-  const afterData = op.after_snapshot as Record<string, Json>[] | null;
-  const hasSample =
-    beforeData && Array.isArray(beforeData) && beforeData.length > 0;
-
-  return (
-    <div className="rounded-lg border p-3 space-y-2">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <StatusBadge status={op.status} />
-          <span className="text-sm font-medium">
-            {op.description || plainLanguage(op)}
-          </span>
-        </div>
-        {op.column_name && (
-          <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono text-muted-foreground">
-            {op.column_name}
-          </code>
-        )}
-      </div>
-
-      {op.reasoning && (
-        <p className="text-xs text-muted-foreground">{op.reasoning}</p>
-      )}
-
-      {/* Before/after sample */}
-      {hasSample && (
-        <BeforeAfterPreview before={beforeData} after={afterData} />
-      )}
-
-      {/* Action buttons */}
-      <div className="flex gap-2 pt-1">
-        {op.status === "applied" && onRollback && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-destructive hover:text-destructive"
-            onClick={() => onRollback(op)}
-            disabled={isActioning}
-          >
-            {isActioning ? (
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-            )}
-            Rollback
-          </Button>
-        )}
-        {(op.status === "pending" || op.status === "approved") && onSkip && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onSkip(op)}
-            disabled={isActioning}
-          >
-            <X className="mr-1.5 h-3.5 w-3.5" />
-            Skip
-          </Button>
-        )}
-        {(op.status === "pending" || op.status === "approved") && onApply && (
-          <Button
-            size="sm"
-            onClick={() => onApply(op)}
-            disabled={isActioning}
-          >
-            {isActioning ? (
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Check className="mr-1.5 h-3.5 w-3.5" />
-            )}
-            Apply
-          </Button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function BeforeAfterPreview({
-  before,
-  after,
-}: {
-  before: Record<string, Json>[] | null;
-  after: Record<string, Json>[] | null;
-}) {
-  if (!before || before.length === 0) return null;
-  const cols = Object.keys(before[0]);
-  const rows = before.slice(0, 5);
-  const afterRows = after?.slice(0, 5) ?? [];
-
-  return (
-    <div>
-      <p className="mb-2 text-xs font-semibold text-muted-foreground">
-        Before &rarr; After
-      </p>
-      <div className="overflow-x-auto rounded border">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b bg-muted/50">
-              {cols.map((col) => (
-                <th
-                  key={`before-${col}`}
-                  className="px-2 py-1 text-left font-mono font-medium"
-                >
-                  {col}
-                </th>
-              ))}
-              {afterRows.length > 0 && (
-                <>
-                  <th className="px-1 text-center text-muted-foreground">
-                    &rarr;
-                  </th>
-                  {cols.map((col) => (
-                    <th
-                      key={`after-${col}`}
-                      className="px-2 py-1 text-left font-mono font-medium text-green-700 dark:text-green-400"
-                    >
-                      {col}
-                    </th>
-                  ))}
-                </>
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, i) => {
-              const afterRow = afterRows[i];
-              return (
-                <tr key={i} className="border-b last:border-0">
-                  {cols.map((col) => (
-                    <td key={`b-${col}`} className="px-2 py-1 font-mono">
-                      {String(row[col] ?? "")}
-                    </td>
-                  ))}
-                  {afterRows.length > 0 && (
-                    <>
-                      <td className="px-1 text-center text-muted-foreground">
-                        &rarr;
-                      </td>
-                      {cols.map((col) => (
-                        <td
-                          key={`a-${col}`}
-                          className="px-2 py-1 font-mono text-green-700 dark:text-green-400"
-                        >
-                          {afterRow ? String(afterRow[col] ?? "") : ""}
-                        </td>
-                      ))}
-                    </>
-                  )}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}

@@ -241,6 +241,7 @@ function buildAuditSections(
       columnName: flag.column_name ?? undefined,
       description: (evidence?.description as string) ?? "Potential bias detected",
       recommendation: flag.bias_recommendation ?? "Review data collection methodology",
+      infoOnly: true, // Bias flags require methodology review, not data fixes
     });
   }
   for (const ci of allConsistencyIssues) {
@@ -364,6 +365,7 @@ function buildAuditSections(
   const skipIssues: AuditIssue[] = [];
   for (const ci of allConsistencyIssues) {
     if ((ci.check_type as string) === "skip_logic_violation") {
+      const matchingOp = findOp(["fix_skip_logic"], ci.column_name as string | undefined);
       skipIssues.push({
         id: `s7-skip-${skipIssues.length}`,
         severity: (ci.severity as Severity) ?? "warning",
@@ -372,7 +374,9 @@ function buildAuditSections(
         description: (ci.description as string) ?? "Skip logic was not applied correctly",
         affectedRowsCount: (ci.affected_rows_count as number) ?? undefined,
         recommendation: (ci.recommendation as string) ?? "Verify skip logic in data collection",
-        matchingOpId: findOp(["fix_skip_logic"], ci.column_name as string | undefined),
+        matchingOpId: matchingOp,
+        // Structural routing issues with no fix operation are info-only
+        infoOnly: !matchingOp,
       });
     }
   }
@@ -694,6 +698,36 @@ export function Step4Quality({
     router.push(`/projects/${project.id}/step/5`);
   }, [router, project.id, project.pipeline_status, supabase]);
 
+  // Skip Step 5 and go directly to Analysis when all issues resolved
+  const handleContinueToAnalysis = useCallback(async () => {
+    const newPipeline: PipelineStatus = {
+      ...((project.pipeline_status as PipelineStatus) ?? {}),
+      "4": "completed",
+      "5": "completed",
+      "6": "active",
+    };
+    await supabase
+      .from("projects")
+      // @ts-ignore — supabase update type inference
+      .update({ current_step: 6, pipeline_status: newPipeline as unknown as Json })
+      .eq("id", project.id);
+    toast("Dataset ready for analysis", { variant: "success" });
+    router.refresh();
+    router.push(`/projects/${project.id}/step/6`);
+  }, [router, project.id, project.pipeline_status, supabase]);
+
+  // Skip remaining issues and proceed to analysis
+  const handleSkipRemaining = useCallback(async () => {
+    // Dismiss all remaining unresolved issues
+    const activeIssues = auditSections.flatMap((s) =>
+      s.issues.filter((i) => !dismissedIds.has(i.id) && !i.infoOnly)
+    );
+    if (activeIssues.length > 0) {
+      setDismissedIds((prev) => new Set([...prev, ...activeIssues.map((i) => i.id)]));
+    }
+    await handleContinueToAnalysis();
+  }, [auditSections, dismissedIds, handleContinueToAnalysis]);
+
   const handleApproveAll = useCallback(async () => {
     // Get current user for approved_by field
     const {
@@ -721,8 +755,8 @@ export function Step4Quality({
     if (activeIssues.length > 0) {
       setDismissedIds((prev) => new Set([...prev, ...activeIssues.map((i) => i.id)]));
     }
-    await handleContinue();
-  }, [auditSections, dismissedIds, handleContinue, supabase]);
+    await handleContinueToAnalysis();
+  }, [auditSections, dismissedIds, handleContinueToAnalysis, supabase]);
 
   /* ================================================================ */
   /*  No dataset guard                                                 */
@@ -934,102 +968,145 @@ export function Step4Quality({
                   </p>
                 )}
 
-                <div className="space-y-2">
-                  {activeIssues.map((issue) => (
-                    <div
-                      key={issue.id}
-                      className="rounded-lg border p-3 space-y-2"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <SeverityPill severity={issue.severity} />
-                          {issue.columnName && (
-                            <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
-                              {issue.columnName}
-                            </code>
-                          )}
-                          <span className="text-sm font-medium">{issue.title}</span>
-                        </div>
-                        {issue.affectedRowsCount != null && (
-                          <span className="text-xs text-muted-foreground whitespace-nowrap">
-                            {issue.affectedRowsCount.toLocaleString()} rows
-                          </span>
-                        )}
-                      </div>
+                <div className="space-y-3">
+                  {activeIssues.map((issue) => {
+                    // Find matching cleaning operation for suggested fix label
+                    const matchingOp = issue.matchingOpId
+                      ? cleaning.all.find((op) => op.id === issue.matchingOpId)
+                      : null;
+                    const suggestedFixLabel = matchingOp?.description ?? "Apply suggested fix";
 
-                      <p className="text-sm text-muted-foreground">
-                        {issue.description}
-                      </p>
+                    // Transform recommendation to first-person expert voice
+                    const expertVoice = issue.recommendation
+                      .replace(/^Consider /i, "I'd suggest ")
+                      .replace(/^Investigate /i, "I'd recommend investigating ")
+                      .replace(/^Review /i, "I'd recommend reviewing ")
+                      .replace(/^Verify /i, "I'd suggest verifying ")
+                      .replace(/^Check /i, "I'd check ")
+                      .replace(/^Remove /i, "I'll remove ")
+                      .replace(/^Fix /i, "I'll fix ")
+                      .replace(/^Cap /i, "I'll cap ")
+                      .replace(/^Impute /i, "I'll impute ");
 
-                      <div className="rounded bg-muted/50 p-2 text-xs text-muted-foreground">
-                        <strong>Recommended:</strong> {issue.recommendation}
-                      </div>
-
-                      {!issue.infoOnly && (
-                        <div className="space-y-2 pt-1">
-                          {/* Custom action input */}
-                          {showCustomInput[issue.id] ? (
-                            <div className="space-y-1.5">
-                              <Textarea
-                                placeholder="Describe your custom action in plain language…"
-                                rows={2}
-                                className="text-sm"
-                                value={customTexts[issue.id] ?? ""}
-                                onChange={(e) =>
-                                  setCustomTexts((prev) => ({ ...prev, [issue.id]: e.target.value }))
-                                }
-                              />
-                            </div>
-                          ) : null}
-
-                          <div className="flex flex-wrap gap-2">
-                            {/* Primary action */}
-                            <Button
-                              size="sm"
-                              onClick={() => handleApplyFix(issue)}
-                              disabled={
-                                applyingIssueId === issue.id ||
-                                (!cleaningSuggestionsLoading && !issue.matchingOpId && !customTexts[issue.id]?.trim())
-                              }
-                            >
-                              {applyingIssueId === issue.id ? (
-                                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                              ) : cleaningSuggestionsLoading && !issue.matchingOpId && !customTexts[issue.id]?.trim() ? (
-                                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                              ) : null}
-                              {cleaningSuggestionsLoading && !issue.matchingOpId && !customTexts[issue.id]?.trim()
-                                ? "Generating fix…"
-                                : issue.matchingOpId
-                                  ? "Apply Fix"
-                                  : customTexts[issue.id]?.trim()
-                                    ? "Apply Custom Action"
-                                    : "Apply Fix"}
-                            </Button>
-
-                            {/* Toggle custom input */}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                setShowCustomInput((prev) => ({ ...prev, [issue.id]: !prev[issue.id] }))
-                              }
-                            >
-                              {showCustomInput[issue.id] ? "Cancel custom" : "Custom action…"}
-                            </Button>
-
+                    return (
+                      <div
+                        key={issue.id}
+                        className="rounded-lg border p-4 space-y-3"
+                      >
+                        {/* Header row */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <SeverityPill severity={issue.severity} />
+                            <span className="text-sm font-medium">{issue.title}</span>
+                            {issue.columnName && (
+                              <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono text-muted-foreground">
+                                {issue.columnName}
+                              </code>
+                            )}
+                          </div>
+                          {!issue.infoOnly && (
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="text-muted-foreground"
+                              className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
                               onClick={() => handleDismiss(issue.id)}
+                              title="Dismiss this issue"
                             >
-                              Ignore
+                              ×
                             </Button>
-                          </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  ))}
+
+                        {/* Description */}
+                        <p className="text-sm text-muted-foreground">
+                          {issue.description}
+                          {issue.affectedRowsCount != null && (
+                            <span className="ml-1.5 text-xs">
+                              ({issue.affectedRowsCount.toLocaleString()} rows affected)
+                            </span>
+                          )}
+                        </p>
+
+                        {/* Expert voice explanation */}
+                        <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900 p-3">
+                          <p className="text-sm text-blue-900 dark:text-blue-100 italic">
+                            "{expertVoice}"
+                          </p>
+                        </div>
+
+                        {/* Action area */}
+                        {issue.infoOnly ? (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <span className="text-base">📌</span>
+                            <span>Noted — no direct data fix available. Keep this in mind when interpreting results.</span>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {/* Suggested fix label */}
+                            {issue.matchingOpId && (
+                              <div className="flex items-center gap-2 text-sm">
+                                <span className="text-primary">✦</span>
+                                <span className="font-medium">Suggested fix:</span>
+                                <span className="text-muted-foreground">{suggestedFixLabel}</span>
+                              </div>
+                            )}
+
+                            {/* Custom action input */}
+                            {showCustomInput[issue.id] && (
+                              <div className="space-y-2 rounded border p-3 bg-muted/30">
+                                <p className="text-xs font-medium text-muted-foreground">Describe what to do:</p>
+                                <Textarea
+                                  placeholder="e.g., Remove rows where age > 120, or impute with group median by region…"
+                                  rows={2}
+                                  className="text-sm"
+                                  value={customTexts[issue.id] ?? ""}
+                                  onChange={(e) =>
+                                    setCustomTexts((prev) => ({ ...prev, [issue.id]: e.target.value }))
+                                  }
+                                />
+                              </div>
+                            )}
+
+                            {/* Action buttons */}
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                size="sm"
+                                onClick={() => handleApplyFix(issue)}
+                                disabled={
+                                  applyingIssueId === issue.id ||
+                                  (!cleaningSuggestionsLoading && !issue.matchingOpId && !customTexts[issue.id]?.trim())
+                                }
+                              >
+                                {applyingIssueId === issue.id ? (
+                                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                ) : cleaningSuggestionsLoading && !issue.matchingOpId ? (
+                                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                ) : null}
+                                {applyingIssueId === issue.id
+                                  ? "Applying…"
+                                  : cleaningSuggestionsLoading && !issue.matchingOpId
+                                    ? "Generating fix…"
+                                    : customTexts[issue.id]?.trim()
+                                      ? "Apply Custom"
+                                      : "Apply this fix"}
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  setShowCustomInput((prev) => ({ ...prev, [issue.id]: !prev[issue.id] }))
+                                }
+                              >
+                                <ChevronDown className={`mr-1.5 h-3.5 w-3.5 transition-transform ${showCustomInput[issue.id] ? "rotate-180" : ""}`} />
+                                {showCustomInput[issue.id] ? "Cancel" : "Use a different approach"}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* Dismissed issues footer */}
@@ -1080,37 +1157,58 @@ export function Step4Quality({
 
       {/* Bottom action row */}
       {hasResults && (() => {
-        // Count unresolved fixable issues (have matchingOpId, not dismissed)
+        // Count unresolved fixable issues (have matchingOpId, not dismissed, not infoOnly)
         const unresolvedFixable = auditSections.flatMap((s) =>
           s.issues.filter((i) => !dismissedIds.has(i.id) && !i.infoOnly && i.matchingOpId)
         );
         const hasUnresolvedFixable = unresolvedFixable.length > 0;
 
+        // Count applied fixes
+        const appliedCount = cleaning.all.filter((op) => op.status === "applied").length;
+        const notedCount = auditSections.flatMap((s) =>
+          s.issues.filter((i) => i.infoOnly && !dismissedIds.has(i.id))
+        ).length;
+
         return (
-          <div className="flex items-center justify-between border-t pt-4">
-            <div className="text-sm text-muted-foreground">
-              {totalIssueCount === 0
-                ? "No issues found"
-                : `${totalIssueCount} issue${totalIssueCount !== 1 ? "s" : ""} found`}
-              {hasUnresolvedFixable && ` (${unresolvedFixable.length} fixable)`}
-            </div>
-            <div className="flex gap-2">
-              {hasUnresolvedFixable ? (
-                <>
-                  <Button variant="ghost" onClick={handleContinue}>
-                    Skip to Cleaning
-                  </Button>
-                  <Button onClick={handleApproveAll}>
-                    Approve All & Proceed
+          <div className="space-y-3 border-t pt-4">
+            {/* Expert summary when all clear */}
+            {!hasUnresolvedFixable && (appliedCount > 0 || notedCount > 0) && (
+              <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4">
+                <p className="text-sm text-green-800 dark:text-green-200">
+                  <CheckCircle2 className="inline mr-2 h-4 w-4" />
+                  Your dataset is ready for analysis.
+                  {appliedCount > 0 && ` ${appliedCount} fix${appliedCount !== 1 ? "es" : ""} applied`}
+                  {appliedCount > 0 && notedCount > 0 && ","}
+                  {notedCount > 0 && ` ${notedCount} issue${notedCount !== 1 ? "s" : ""} noted for interpretation`}.
+                </p>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">
+                {totalIssueCount === 0
+                  ? "No issues found"
+                  : `${totalIssueCount} issue${totalIssueCount !== 1 ? "s" : ""} reviewed`}
+                {hasUnresolvedFixable && ` · ${unresolvedFixable.length} pending`}
+              </div>
+              <div className="flex gap-2">
+                {hasUnresolvedFixable ? (
+                  <>
+                    <Button variant="ghost" onClick={handleSkipRemaining}>
+                      Skip remaining issues
+                    </Button>
+                    <Button onClick={handleContinueToAnalysis} disabled={true} title="Apply or dismiss all flagged issues first">
+                      Continue to Analysis
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </>
+                ) : (
+                  <Button onClick={handleContinueToAnalysis}>
+                    Continue to Analysis
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
-                </>
-              ) : (
-                <Button onClick={handleContinue}>
-                  Continue to Cleaning
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              )}
+                )}
+              </div>
             </div>
           </div>
         );
