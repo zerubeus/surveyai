@@ -5,6 +5,9 @@ import { StepBar } from "@/components/workflow/StepBar";
 import { ChevronLeft } from "lucide-react";
 import type { PipelineStatus } from "@/lib/types/database";
 
+// Always fetch fresh data — pipelineStatus must reflect DB state after each step transition
+export const dynamic = "force-dynamic";
+
 const DEFAULT_PIPELINE: PipelineStatus = {
   "1": "active",
   "2": "locked",

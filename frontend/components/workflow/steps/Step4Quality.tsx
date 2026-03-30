@@ -295,37 +295,51 @@ export function Step4Quality({
       });
   }, [datasetId, supabase]);
 
-  /* ---------- Auto-dispatch interpretation ---------- */
+  /* ---------- Auto-dispatch interpretation + cleaning suggestions ---------- */
   const interpretDispatched = useRef(false);
+  const cleaningDispatched = useRef(false);
+  const [cleaningSuggestionsTaskId, setCleaningSuggestionsTaskId] = useState<string | null>(null);
+  const cleaningSuggestionsProgress = useTaskProgress(cleaningSuggestionsTaskId);
+
   useEffect(() => {
     if (
       edaProgress.status === "completed" &&
       consistencyProgress.status === "completed" &&
       biasProgress.status === "completed" &&
-      !interpretDispatched.current &&
-      !interpretTaskId &&
       datasetId
     ) {
-      interpretDispatched.current = true;
-      dispatchTask(
-        project.id,
-        "interpret_results",
-        {
-          dataset_id: datasetId,
-          project_id: project.id,
-        },
-        datasetId,
-      )
-        .then(({ taskId }) => setInterpretTaskId(taskId))
-        .catch(() => {
-          // Interpretation is best-effort
-        });
+      // Auto-dispatch interpretation (best-effort)
+      if (!interpretDispatched.current && !interpretTaskId) {
+        interpretDispatched.current = true;
+        dispatchTask(
+          project.id,
+          "interpret_results",
+          { dataset_id: datasetId, project_id: project.id },
+          datasetId,
+        )
+          .then(({ taskId }) => setInterpretTaskId(taskId))
+          .catch(() => {});
+      }
+      // Auto-dispatch cleaning suggestions (so Step4 shows AI-suggested fixes per issue)
+      if (!cleaningDispatched.current && cleaning.all.length === 0 && !cleaningSuggestionsTaskId) {
+        cleaningDispatched.current = true;
+        dispatchTask(
+          project.id,
+          "generate_cleaning_suggestions",
+          { dataset_id: datasetId },
+          datasetId,
+        )
+          .then(({ taskId }) => setCleaningSuggestionsTaskId(taskId))
+          .catch(() => {});
+      }
     }
   }, [
     edaProgress.status,
     consistencyProgress.status,
     biasProgress.status,
     interpretTaskId,
+    cleaningSuggestionsTaskId,
+    cleaning.all.length,
     datasetId,
     project.id,
     dispatchTask,
@@ -434,15 +448,31 @@ export function Step4Quality({
             setApplyingIssueId(null);
             return;
           }
-          const customTaskType = "apply_custom_cleaning" as Parameters<typeof dispatchTask>[1];
+          // Insert a cleaning_operation record for the custom description,
+          // then apply it via the standard task type (no custom enum needed)
+          const { data: opData, error: opError } = await supabase
+            .from("cleaning_operations")
+            // @ts-ignore — supabase insert type inference
+            .insert({
+              dataset_id: datasetId,
+              operation_type: "fix_encoding",
+              column_name: issue.columnName ?? null,
+              description: customText,
+              rationale: "User-defined fix",
+              status: "approved",
+              priority: 99,
+            })
+            .select("id")
+            .single();
+          if (opError || !opData) {
+            toast("Failed to save custom fix", { variant: "error" });
+            setApplyingIssueId(null);
+            return;
+          }
           const { taskId } = await dispatchTask(
             project.id,
-            customTaskType,
-            {
-              description: customText,
-              dataset_id: datasetId,
-              column_name: issue.columnName,
-            },
+            "apply_cleaning_operation",
+            { operation_id: (opData as { id: string }).id, dataset_id: datasetId },
             datasetId,
           );
           setFixApplyTaskId(taskId);
@@ -460,7 +490,7 @@ export function Step4Quality({
         setApplyingIssueId(null);
       }
     },
-    [datasetId, selectedFixes, customTexts, dispatchTask, project.id],
+    [datasetId, selectedFixes, customTexts, dispatchTask, project.id, supabase],
   );
 
   const handleContinue = useCallback(() => {

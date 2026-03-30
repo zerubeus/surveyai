@@ -23,7 +23,7 @@ import {
   Circle,
   Loader2,
   Minus,
-  Wand2,
+  RotateCcw,
   X,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
@@ -76,12 +76,13 @@ function matchesResearchQuestion(
 ): string | null {
   if (!columnName) return null;
   const rqs = Array.isArray(researchQuestions)
-    ? (researchQuestions as string[])
+    ? (researchQuestions as Array<{ text?: string } | string>)
     : [];
   const colLower = columnName.toLowerCase();
   for (const rq of rqs) {
-    if (typeof rq === "string" && rq.toLowerCase().includes(colLower)) {
-      return rq.length > 80 ? rq.slice(0, 80) + "\u2026" : rq;
+    const text = typeof rq === "string" ? rq : rq?.text ?? "";
+    if (text.toLowerCase().includes(colLower)) {
+      return text.length > 80 ? text.slice(0, 80) + "\u2026" : text;
     }
   }
   return null;
@@ -98,70 +99,32 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
   const datasetId = dataset?.id ?? null;
 
   const cleaning = useCleaningSuggestions(datasetId);
-  const { dispatchTask, isDispatching } = useDispatchTask();
+  const { dispatchTask } = useDispatchTask();
 
-  /* ---------- Generate task tracking ---------- */
-  const [generateTaskId, setGenerateTaskId] = useState<string | null>(null);
-  const generateProgress = useTaskProgress(generateTaskId);
-
-  /* ---------- Apply task tracking ---------- */
-  const [applyingOpId, setApplyingOpId] = useState<string | null>(null);
-  const [applyTaskId, setApplyTaskId] = useState<string | null>(null);
-  const applyProgress = useTaskProgress(applyTaskId);
+  /* ---------- Apply / rollback task tracking ---------- */
+  const [actioningOpId, setActioningOpId] = useState<string | null>(null);
+  const [actionTaskId, setActionTaskId] = useState<string | null>(null);
+  const actionProgress = useTaskProgress(actionTaskId);
 
   /* ---------- Review state ---------- */
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFinalizing, setIsFinalizing] = useState(false);
 
-  /* ---------- Computed ---------- */
-  const actionable = useMemo(
-    () =>
-      cleaning.all.filter(
-        (op) => op.status === "pending" || op.status === "approved",
-      ),
-    [cleaning.all],
-  );
-
-  const appliedOps = useMemo(
-    () => cleaning.all.filter((op) => op.status === "applied"),
-    [cleaning.all],
-  );
-
-  /* ---------- Auto-detect running generate task ---------- */
-  useEffect(() => {
-    if (!datasetId) return;
-    if (cleaning.all.length > 0 || cleaning.isLoading) return;
-    supabase
-      .from("tasks")
-      .select("id")
-      .eq("project_id", projectId)
-      .eq("task_type", "generate_cleaning_suggestions")
-      .in("status", ["pending", "claimed", "running"])
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .then(({ data }) => {
-        if (data && data.length > 0) {
-          // @ts-ignore
-          setGenerateTaskId(data[0].id);
-        }
-      });
-  }, [cleaning.all.length, cleaning.isLoading, projectId, datasetId, supabase]);
-
-  /* ---------- Reset apply tracking on complete ---------- */
+  /* ---------- Reset action tracking on complete ---------- */
   useEffect(() => {
     if (
-      applyProgress.status === "completed" ||
-      applyProgress.status === "failed"
+      actionProgress.status === "completed" ||
+      actionProgress.status === "failed"
     ) {
-      if (applyProgress.status === "completed") {
-        toast("Cleaning operation applied", { variant: "success" });
+      if (actionProgress.status === "completed") {
+        toast("Operation completed", { variant: "success" });
       } else {
-        toast("Failed to apply operation", { variant: "error" });
+        toast("Operation failed", { variant: "error" });
       }
-      setApplyingOpId(null);
-      setApplyTaskId(null);
+      setActioningOpId(null);
+      setActionTaskId(null);
     }
-  }, [applyProgress.status]);
+  }, [actionProgress.status]);
 
   /* ---------- Keyboard navigation ---------- */
   useEffect(() => {
@@ -182,26 +145,22 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [cleaning.all.length]);
 
-  /* ---------- Handlers ---------- */
-  const handleGenerate = useCallback(async () => {
-    if (!datasetId) return;
-    try {
-      const { taskId } = await dispatchTask(
-        projectId,
-        "generate_cleaning_suggestions",
-        { dataset_id: datasetId },
-        datasetId,
-      );
-      setGenerateTaskId(taskId);
-    } catch {
-      toast("Failed to generate suggestions", { variant: "error" });
-    }
-  }, [projectId, datasetId, dispatchTask]);
+  /* ---------- Computed ---------- */
+  const pendingOps = useMemo(
+    () => cleaning.all.filter((op) => op.status === "pending" || op.status === "approved"),
+    [cleaning.all],
+  );
 
+  const appliedOps = useMemo(
+    () => cleaning.all.filter((op) => op.status === "applied"),
+    [cleaning.all],
+  );
+
+  /* ---------- Handlers ---------- */
   const handleApply = useCallback(
     async (op: CleaningOperation) => {
       if (!datasetId) return;
-      setApplyingOpId(op.id);
+      setActioningOpId(op.id);
       try {
         await supabase
           .from("cleaning_operations")
@@ -214,13 +173,15 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
           { operation_id: op.id, dataset_id: datasetId },
           datasetId,
         );
-        setApplyTaskId(taskId);
+        setActionTaskId(taskId);
+        // advance to next pending op
+        setCurrentIndex((i) => Math.min(i + 1, cleaning.all.length - 1));
       } catch {
         toast("Failed to apply operation", { variant: "error" });
-        setApplyingOpId(null);
+        setActioningOpId(null);
       }
     },
-    [projectId, datasetId, dispatchTask, supabase],
+    [projectId, datasetId, dispatchTask, supabase, cleaning.all.length],
   );
 
   const handleSkip = useCallback(
@@ -230,11 +191,28 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
         // @ts-ignore
         .update({ status: "rejected" as Enums<"cleaning_op_status"> })
         .eq("id", op.id);
-      if (currentIndex >= actionable.length - 1) {
-        setCurrentIndex(Math.max(0, currentIndex - 1));
+      setCurrentIndex((i) => Math.min(i + 1, cleaning.all.length - 1));
+    },
+    [supabase, cleaning.all.length],
+  );
+
+  const handleRollback = useCallback(
+    async (op: CleaningOperation) => {
+      setActioningOpId(op.id);
+      try {
+        await supabase
+          .from("cleaning_operations")
+          // @ts-ignore
+          .update({ status: "undone" as Enums<"cleaning_op_status"> })
+          .eq("id", op.id);
+        toast("Operation rolled back", { variant: "success" });
+      } catch {
+        toast("Failed to roll back", { variant: "error" });
+      } finally {
+        setActioningOpId(null);
       }
     },
-    [supabase, currentIndex, actionable.length],
+    [supabase],
   );
 
   const handleFinalize = useCallback(async () => {
@@ -253,9 +231,7 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
           pipeline_status: newPipeline as unknown as Json,
         })
         .eq("id", projectId);
-      toast("Data cleaning finalized! Moving to Analysis.", {
-        variant: "success",
-      });
+      toast("Data cleaning finalized! Moving to Analysis.", { variant: "success" });
       router.refresh();
       router.push(`/projects/${projectId}/step/6`);
     } catch {
@@ -264,11 +240,6 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
       setIsFinalizing(false);
     }
   }, [project.pipeline_status, supabase, projectId, router]);
-
-  const isGenerating =
-    generateProgress.status === "running" ||
-    generateProgress.status === "claimed" ||
-    generateProgress.status === "pending";
 
   /* ================================================================ */
   /*  No dataset                                                       */
@@ -284,76 +255,66 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
   }
 
   /* ================================================================ */
-  /*  No suggestions yet                                               */
+  /*  Still loading                                                    */
   /* ================================================================ */
-  if (cleaning.all.length === 0 && !isGenerating && !cleaning.isLoading) {
+  if (cleaning.isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-2xl font-bold">Data Cleaning</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Loading cleaning operations…</p>
+        </div>
+        <Card>
+          <CardContent className="flex items-center gap-3 py-8">
+            <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+            <span className="text-sm text-muted-foreground">Loading…</span>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  /* ================================================================ */
+  /*  No operations yet                                               */
+  /* ================================================================ */
+  if (cleaning.all.length === 0) {
     return (
       <div className="space-y-6">
         <div>
           <h2 className="text-2xl font-bold">Data Cleaning</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Review and apply AI-generated cleaning suggestions based on your
-            quality analysis.
+            No cleaning operations found. Go back to the Quality step to review issues and apply fixes.
           </p>
         </div>
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <Wand2 className="mb-4 h-12 w-12 text-muted-foreground/50" />
-            <p className="mb-4 text-sm text-muted-foreground">
-              Generate AI-powered cleaning suggestions based on the quality
-              analysis.
+            <CheckCircle2 className="mb-4 h-12 w-12 text-muted-foreground/50" />
+            <p className="mb-2 text-sm font-medium">No cleaning operations</p>
+            <p className="mb-6 text-sm text-muted-foreground text-center max-w-sm">
+              Cleaning suggestions are generated during the Quality Assessment step. 
+              Go back to review quality issues and apply fixes there.
             </p>
-            <Button onClick={handleGenerate} disabled={isDispatching}>
-              {isDispatching ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Dispatching...
-                </>
-              ) : (
-                <>
-                  <Wand2 className="mr-2 h-4 w-4" />
-                  Generate Cleaning Suggestions
-                </>
-              )}
+            <Button variant="outline" onClick={() => router.push(`/projects/${projectId}/step/4`)}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Quality Assessment
             </Button>
           </CardContent>
         </Card>
-      </div>
-    );
-  }
-
-  /* ================================================================ */
-  /*  Generating in progress                                           */
-  /* ================================================================ */
-  if (isGenerating || cleaning.isLoading) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-bold">Data Cleaning</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Generating cleaning suggestions&hellip;
-          </p>
+        <div className="flex justify-end border-t pt-4">
+          <Button onClick={handleFinalize} disabled={isFinalizing}>
+            {isFinalizing ? (
+              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Finalizing…</>
+            ) : (
+              <>Continue to Analysis <ArrowRight className="ml-2 h-4 w-4" /></>
+            )}
+          </Button>
         </div>
-        <Card>
-          <CardContent className="py-8 space-y-4">
-            <div className="flex items-center gap-3">
-              <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-              <span className="text-sm">
-                {generateProgress.progressMessage ?? "Analysing data quality issues\u2026"}
-              </span>
-            </div>
-            {generateProgress.progress != null &&
-              generateProgress.progress > 0 && (
-                <Progress value={generateProgress.progress} className="h-2" />
-              )}
-          </CardContent>
-        </Card>
       </div>
     );
   }
 
   /* ================================================================ */
-  /*  Suggestions loaded — guided review                               */
+  /*  Main: guided review + applied ops                               */
   /* ================================================================ */
   const total = cleaning.all.length;
   const safeIndex = Math.min(currentIndex, total - 1);
@@ -361,24 +322,14 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
   const progressPct = total > 0 ? ((safeIndex + 1) / total) * 100 : 0;
 
   const rqMatch = currentOp
-    ? matchesResearchQuestion(
-        currentOp.column_name,
-        project.research_questions,
-      )
+    ? matchesResearchQuestion(currentOp.column_name, project.research_questions)
     : null;
 
-  const beforeData = currentOp?.before_snapshot as
-    | Record<string, Json>[]
-    | null;
-  const afterData = currentOp?.after_snapshot as
-    | Record<string, Json>[]
-    | null;
-  const hasSample =
-    beforeData && Array.isArray(beforeData) && beforeData.length > 0;
+  const beforeData = currentOp?.before_snapshot as Record<string, Json>[] | null;
+  const afterData = currentOp?.after_snapshot as Record<string, Json>[] | null;
+  const hasSample = beforeData && Array.isArray(beforeData) && beforeData.length > 0;
 
-  const isCurrentApplying = currentOp
-    ? applyingOpId === currentOp.id
-    : false;
+  const isCurrentActioning = currentOp ? actioningOpId === currentOp.id : false;
 
   return (
     <div className="space-y-6">
@@ -387,21 +338,22 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
         <div>
           <h2 className="text-2xl font-bold">Data Cleaning</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Review each suggestion and decide whether to apply or skip it.
+            Review each cleaning operation. Applied operations can be rolled back.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline">
-            {total} suggestion{total !== 1 ? "s" : ""}
-          </Badge>
+        <div className="flex items-center gap-2 text-sm">
           {appliedOps.length > 0 && (
             <Badge className="bg-green-600">{appliedOps.length} applied</Badge>
+          )}
+          {pendingOps.length > 0 && (
+            <Badge variant="outline">{pendingOps.length} pending</Badge>
           )}
         </div>
       </div>
 
       {/* Two-column layout */}
       <div className="flex flex-col lg:flex-row gap-4">
+
         {/* ======================================================== */}
         {/*  Main card (left)                                         */}
         {/* ======================================================== */}
@@ -410,19 +362,16 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
             <Card>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between text-sm text-muted-foreground">
-                  <span>
-                    Suggestion {safeIndex + 1} of {total}
-                  </span>
-                  <SeverityBadge severity={currentOp.severity} />
+                  <span>Operation {safeIndex + 1} of {total}</span>
+                  <StatusBadge status={currentOp.status} />
                 </div>
                 <Progress value={progressPct} className="h-1.5 mt-2" />
               </CardHeader>
+
               <CardContent className="space-y-5">
                 {/* Title + column */}
                 <div>
-                  <CardTitle className="text-base">
-                    {plainLanguage(currentOp)}
-                  </CardTitle>
+                  <CardTitle className="text-base">{plainLanguage(currentOp)}</CardTitle>
                   {currentOp.column_name && (
                     <p className="mt-1 text-sm text-muted-foreground">
                       Affected column:{" "}
@@ -435,23 +384,21 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
 
                 {/* Why this matters */}
                 <div className="rounded-lg bg-muted/50 p-3 space-y-1">
-                  <p className="text-xs font-semibold text-muted-foreground">
-                    Why this matters
-                  </p>
+                  <p className="text-xs font-semibold text-muted-foreground">Why this matters</p>
                   {rqMatch ? (
                     <p className="text-sm">
                       This column appears in your research question:{" "}
                       <span className="italic">&ldquo;{rqMatch}&rdquo;</span>
                     </p>
                   ) : (
-                    <p className="text-sm">
-                      {currentOp.reasoning || currentOp.description}
-                    </p>
+                    <p className="text-sm">{currentOp.reasoning || currentOp.description}</p>
                   )}
                 </div>
 
-                {/* Operation description */}
-                <p className="text-sm">{currentOp.description}</p>
+                {/* Description */}
+                {currentOp.description && (
+                  <p className="text-sm text-muted-foreground">{currentOp.description}</p>
+                )}
 
                 {/* Before → After preview */}
                 {hasSample && (
@@ -459,27 +406,18 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
                 )}
 
                 {/* Apply progress */}
-                {isCurrentApplying && (
+                {isCurrentActioning && (
                   <div className="space-y-1">
-                    <Progress
-                      value={applyProgress.progress}
-                      className="h-2"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Applying&hellip;
-                    </p>
+                    <Progress value={actionProgress.progress} className="h-2" />
+                    <p className="text-xs text-muted-foreground">Processing…</p>
                   </div>
                 )}
 
                 {/* Keyboard hint */}
                 <p className="text-xs text-muted-foreground text-center">
-                  <kbd className="rounded border bg-muted px-1.5 py-0.5 text-xs font-mono">
-                    &larr;
-                  </kbd>{" "}
+                  <kbd className="rounded border bg-muted px-1.5 py-0.5 text-xs font-mono">&larr;</kbd>{" "}
                   Previous &middot;{" "}
-                  <kbd className="rounded border bg-muted px-1.5 py-0.5 text-xs font-mono">
-                    &rarr;
-                  </kbd>{" "}
+                  <kbd className="rounded border bg-muted px-1.5 py-0.5 text-xs font-mono">&rarr;</kbd>{" "}
                   Next
                 </p>
 
@@ -498,55 +436,70 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() =>
-                        setCurrentIndex((i) => Math.min(i + 1, total - 1))
-                      }
+                      onClick={() => setCurrentIndex((i) => Math.min(i + 1, total - 1))}
                       disabled={safeIndex >= total - 1}
                     >
                       Next
                       <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                     </Button>
                   </div>
+
                   <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => handleSkip(currentOp)}
-                      disabled={
-                        isCurrentApplying ||
-                        currentOp.status === "applied" ||
-                        currentOp.status === "rejected"
-                      }
-                    >
-                      <X className="mr-1.5 h-3.5 w-3.5" />
-                      Skip
-                    </Button>
-                    <Button
-                      onClick={() => handleApply(currentOp)}
-                      disabled={
-                        isCurrentApplying ||
-                        currentOp.status === "applied" ||
-                        currentOp.status === "rejected"
-                      }
-                    >
-                      {isCurrentApplying ? (
-                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Check className="mr-1.5 h-3.5 w-3.5" />
-                      )}
-                      Apply
-                    </Button>
+                    {currentOp.status === "applied" ? (
+                      /* Applied op → rollback button */
+                      <Button
+                        variant="outline"
+                        onClick={() => handleRollback(currentOp)}
+                        disabled={isCurrentActioning}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        {isCurrentActioning ? (
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                        )}
+                        Roll back
+                      </Button>
+                    ) : currentOp.status === "pending" || currentOp.status === "approved" ? (
+                      /* Pending op → skip / apply */
+                      <>
+                        <Button
+                          variant="outline"
+                          onClick={() => handleSkip(currentOp)}
+                          disabled={isCurrentActioning}
+                        >
+                          <X className="mr-1.5 h-3.5 w-3.5" />
+                          Skip
+                        </Button>
+                        <Button
+                          onClick={() => handleApply(currentOp)}
+                          disabled={isCurrentActioning}
+                        >
+                          {isCurrentActioning ? (
+                            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Check className="mr-1.5 h-3.5 w-3.5" />
+                          )}
+                          Apply
+                        </Button>
+                      </>
+                    ) : (
+                      /* Rejected / undone — info only */
+                      <Badge variant="outline" className="text-muted-foreground">
+                        {currentOp.status === "rejected" ? "Skipped" : "Rolled back"}
+                      </Badge>
+                    )}
                   </div>
                 </div>
               </CardContent>
             </Card>
           ) : (
-            <Card className="border-green-200 dark:border-green-900 bg-green-50/50 dark:bg-green-950/20">
+            <Card className="border-green-200 dark:border-green-900 bg-green-50/50">
               <CardContent className="flex flex-col items-center py-8">
                 <CheckCircle2 className="mb-3 h-8 w-8 text-green-500" />
-                <p className="font-medium">All suggestions reviewed!</p>
+                <p className="font-medium">All operations reviewed!</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {appliedOps.length} applied, {cleaning.rejected.length}{" "}
-                  skipped
+                  {appliedOps.length} applied · {cleaning.rejected.length} skipped
                 </p>
               </CardContent>
             </Card>
@@ -559,7 +512,7 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
         <div className="w-full lg:w-64 flex-shrink-0">
           <Card className="sticky top-4">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm">All suggestions</CardTitle>
+              <CardTitle className="text-sm">All operations</CardTitle>
             </CardHeader>
             <CardContent className="max-h-[60vh] overflow-y-auto p-0">
               <div className="space-y-0.5 px-3 pb-3">
@@ -575,13 +528,8 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
                           : "hover:bg-muted text-muted-foreground"
                       }`}
                     >
-                      <SidebarStatusIcon
-                        status={op.status}
-                        isCurrent={isCurrent}
-                      />
-                      <span className="truncate">
-                        {op.description || plainLanguage(op)}
-                      </span>
+                      <SidebarStatusIcon status={op.status} isCurrent={isCurrent} />
+                      <span className="truncate">{op.description || plainLanguage(op)}</span>
                     </button>
                   );
                 })}
@@ -591,21 +539,53 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
         </div>
       </div>
 
-      {/* ============================================================ */}
-      {/*  Bottom: Finalize                                             */}
-      {/* ============================================================ */}
+      {/* Applied ops summary */}
+      {appliedOps.length > 0 && (
+        <Card className="border-green-200 dark:border-green-900">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-green-700 dark:text-green-400">
+              Applied operations ({appliedOps.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1.5">
+            {appliedOps.map((op) => (
+              <div
+                key={op.id}
+                className="flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2 text-sm"
+              >
+                <div className="flex items-center gap-2">
+                  <Check className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+                  <span className="truncate">{op.description || plainLanguage(op)}</span>
+                  {op.column_name && (
+                    <code className="text-xs text-muted-foreground font-mono">{op.column_name}</code>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground hover:text-destructive flex-shrink-0"
+                  onClick={() => handleRollback(op)}
+                  disabled={actioningOpId === op.id}
+                >
+                  {actioningOpId === op.id ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  )}
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Finalize */}
       <div className="flex justify-end border-t pt-4">
         <Button onClick={handleFinalize} disabled={isFinalizing}>
           {isFinalizing ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Finalizing...
-            </>
+            <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Finalizing…</>
           ) : (
-            <>
-              Finalize &amp; Continue to Analysis
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </>
+            <>Finalize &amp; Continue to Analysis <ArrowRight className="ml-2 h-4 w-4" /></>
           )}
         </Button>
       </div>
@@ -617,43 +597,25 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
 /*  Sub-components                                                     */
 /* ================================================================== */
 
-function SeverityBadge({ severity }: { severity: string | null }) {
-  if (severity === "critical")
-    return (
-      <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 text-xs">
-        critical
-      </Badge>
-    );
-  if (severity === "warning")
-    return (
-      <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 text-xs">
-        warning
-      </Badge>
-    );
-  return (
-    <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs">
-      info
-    </Badge>
-  );
+function StatusBadge({ status }: { status: string }) {
+  if (status === "applied")
+    return <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs">applied</Badge>;
+  if (status === "rejected")
+    return <Badge className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 text-xs">skipped</Badge>;
+  if (status === "undone")
+    return <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 text-xs">rolled back</Badge>;
+  return <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs">pending</Badge>;
 }
 
-function SidebarStatusIcon({
-  status,
-  isCurrent,
-}: {
-  status: string;
-  isCurrent: boolean;
-}) {
+function SidebarStatusIcon({ status, isCurrent }: { status: string; isCurrent: boolean }) {
   if (status === "applied")
     return <Check className="h-3.5 w-3.5 flex-shrink-0 text-green-500" />;
   if (status === "rejected")
     return <Minus className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />;
+  if (status === "undone")
+    return <RotateCcw className="h-3.5 w-3.5 flex-shrink-0 text-orange-500" />;
   if (isCurrent)
-    return (
-      <div className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center">
-        <div className="h-2 w-2 rounded-full bg-primary" />
-      </div>
-    );
+    return <div className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center"><div className="h-2 w-2 rounded-full bg-primary" /></div>;
   return <Circle className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/50" />;
 }
 
@@ -665,38 +627,25 @@ function BeforeAfterPreview({
   after: Record<string, Json>[] | null;
 }) {
   if (!before || before.length === 0) return null;
-
   const cols = Object.keys(before[0]);
   const rows = before.slice(0, 5);
   const afterRows = after?.slice(0, 5) ?? [];
 
   return (
     <div>
-      <p className="mb-2 text-xs font-semibold text-muted-foreground">
-        Before &rarr; After
-      </p>
+      <p className="mb-2 text-xs font-semibold text-muted-foreground">Before &rarr; After</p>
       <div className="overflow-x-auto rounded border">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b bg-muted/50">
               {cols.map((col) => (
-                <th
-                  key={`before-${col}`}
-                  className="px-2 py-1 text-left font-mono font-medium"
-                >
-                  {col}
-                </th>
+                <th key={`before-${col}`} className="px-2 py-1 text-left font-mono font-medium">{col}</th>
               ))}
               {afterRows.length > 0 && (
                 <>
                   <th className="px-1 text-center text-muted-foreground">&rarr;</th>
                   {cols.map((col) => (
-                    <th
-                      key={`after-${col}`}
-                      className="px-2 py-1 text-left font-mono font-medium text-green-700 dark:text-green-400"
-                    >
-                      {col}
-                    </th>
+                    <th key={`after-${col}`} className="px-2 py-1 text-left font-mono font-medium text-green-700 dark:text-green-400">{col}</th>
                   ))}
                 </>
               )}
@@ -708,23 +657,14 @@ function BeforeAfterPreview({
               return (
                 <tr key={i} className="border-b last:border-0">
                   {cols.map((col) => (
-                    <td key={`b-${col}`} className="px-2 py-1 font-mono">
-                      {String(row[col] ?? "")}
-                    </td>
+                    <td key={`b-${col}`} className="px-2 py-1 font-mono">{String(row[col] ?? "")}</td>
                   ))}
                   {afterRows.length > 0 && (
                     <>
-                      <td className="px-1 text-center text-muted-foreground">
-                        &rarr;
-                      </td>
+                      <td className="px-1 text-center text-muted-foreground">&rarr;</td>
                       {cols.map((col) => (
-                        <td
-                          key={`a-${col}`}
-                          className="px-2 py-1 font-mono text-green-700 dark:text-green-400"
-                        >
-                          {afterRow
-                            ? String(afterRow[col] ?? "")
-                            : ""}
+                        <td key={`a-${col}`} className="px-2 py-1 font-mono text-green-700 dark:text-green-400">
+                          {afterRow ? String(afterRow[col] ?? "") : ""}
                         </td>
                       ))}
                     </>
