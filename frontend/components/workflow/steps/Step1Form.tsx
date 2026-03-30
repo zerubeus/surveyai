@@ -151,31 +151,67 @@ interface Step1FormProps {
 export function Step1Form({ project }: Step1FormProps) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
-  // Show onboarding tour for first-time users (when project was just created = no pipeline steps done)
   const isNewProject = !project.pipeline_status || Object.keys(project.pipeline_status as Record<string, unknown>).length === 0;
   const { restartTour } = useOnboardingTour(1, isNewProject);
 
-  // -- form state --
-  const [name, setName] = useState(project.name);
+  // -- Read AI prefill from additional_context --
+  const aiPrefill = (() => {
+    try {
+      const ctx = project.additional_context
+        ? JSON.parse(project.additional_context as string)
+        : null;
+      return ctx?.ai_prefill ?? null;
+    } catch {
+      return null;
+    }
+  })();
+  const aiPrefillFields: string[] = (() => {
+    try {
+      const ctx = project.additional_context
+        ? JSON.parse(project.additional_context as string)
+        : null;
+      return Array.isArray(ctx?.ai_prefill_fields) ? ctx.ai_prefill_fields : [];
+    } catch {
+      return [];
+    }
+  })();
+  const isAiField = (field: string) => aiPrefillFields.includes(field);
+
+  // -- form state — use AI prefill as defaults when available --
+  const [name, setName] = useState(
+    project.name || aiPrefill?.name || ""
+  );
   const [organization, setOrganization] = useState("");
   const [objectiveText, setObjectiveText] = useState(
-    parseObjectiveText(project.description)
+    parseObjectiveText(project.description) || aiPrefill?.objective_text || ""
   );
   const [objectiveTags, setObjectiveTags] = useState<string[]>(
-    parseObjectiveTags(project.description)
+    parseObjectiveTags(project.description).length > 0
+      ? parseObjectiveTags(project.description)
+      : (aiPrefill?.objective_tags ?? [])
   );
   const [samplingMethod, setSamplingMethod] = useState<
     Enums<"sampling_method"> | ""
-  >(project.sampling_method ?? "");
+  >(project.sampling_method ?? (aiPrefill?.sampling_method as Enums<"sampling_method">) ?? "");
   const [targetPopulation, setTargetPopulation] = useState(
-    project.target_population ?? ""
+    project.target_population || aiPrefill?.target_population || ""
   );
-  const [geoScope, setGeoScope] = useState(
-    parseGeoScope(project.geographic_scope)
-  );
+  const [geoScope, setGeoScope] = useState(() => {
+    const parsed = parseGeoScope(project.geographic_scope);
+    if (!parsed.country && aiPrefill?.country) {
+      return { ...parsed, country: aiPrefill.country };
+    }
+    return parsed;
+  });
   const [researchQuestions, setResearchQuestions] = useState<string[]>(() => {
     const rqs = parseResearchQuestions(project.research_questions);
-    return rqs.length > 0 ? rqs : [""];
+    if (rqs.length > 0 && rqs.some((q) => q.trim())) return rqs;
+    if (aiPrefill?.research_questions?.length > 0) {
+      return aiPrefill.research_questions.map((rq: { text: string }) =>
+        typeof rq === "string" ? rq : rq.text
+      );
+    }
+    return [""];
   });
   const [audience, setAudience] = useState<AudienceValue | "">(
     parseAudience(project.additional_context)
@@ -321,9 +357,20 @@ export function Step1Form({ project }: Step1FormProps) {
             Project Identity
           </AccordionTrigger>
           <AccordionContent className="space-y-4 pb-6">
+            {/* AI prefill notice */}
+            {aiPrefillFields.length > 0 && (
+              <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50/60 px-3 py-2 text-xs text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300">
+                <span className="text-blue-500">✦</span>
+                Fields marked <strong>✦ AI</strong> were suggested from your uploaded files. Review and edit as needed.
+              </div>
+            )}
+
             <div className="space-y-2">
-              <Label htmlFor="name">
+              <Label htmlFor="name" className="flex items-center gap-1.5">
                 Project Name <span className="text-red-500">*</span>
+                {isAiField("name") && (
+                  <span className="rounded bg-blue-100 px-1 py-0.5 text-[10px] font-medium text-blue-600 dark:bg-blue-900 dark:text-blue-300">✦ AI</span>
+                )}
               </Label>
               <Input
                 id="name"
@@ -345,7 +392,12 @@ export function Step1Form({ project }: Step1FormProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="objective">Objective</Label>
+              <Label htmlFor="objective" className="flex items-center gap-1.5">
+                Objective
+                {isAiField("objective_text") && (
+                  <span className="rounded bg-blue-100 px-1 py-0.5 text-[10px] font-medium text-blue-600 dark:bg-blue-900 dark:text-blue-300">✦ AI</span>
+                )}
+              </Label>
               <Textarea
                 id="objective"
                 value={objectiveText}
@@ -463,7 +515,12 @@ export function Step1Form({ project }: Step1FormProps) {
         {/* ===== SECTION C — Research Questions ===== */}
         <AccordionItem value="questions" className="rounded-lg border px-4">
           <AccordionTrigger className="text-base font-semibold">
-            Research Questions
+            <span className="flex items-center gap-2">
+              Research Questions
+              {isAiField("research_questions") && (
+                <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 dark:bg-blue-900 dark:text-blue-300">✦ AI</span>
+              )}
+            </span>
           </AccordionTrigger>
           <AccordionContent className="space-y-3 pb-6">
             <p className="text-sm text-muted-foreground">
