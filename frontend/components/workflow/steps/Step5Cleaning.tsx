@@ -488,17 +488,29 @@ export function Step5Cleaning({ project, dataset }: Step5CleaningProps) {
                       )}
                     </div>
                   ) : (
-                    <span className="text-xs text-muted-foreground">
-                      No operations
-                    </span>
+                    <Badge className="bg-green-50 text-green-700 border border-green-200 text-xs">
+                      ✓ All clear
+                    </Badge>
                   )}
                 </div>
               </AccordionTrigger>
               <AccordionContent className="px-4 pb-4">
                 {ops.length === 0 && (
-                  <p className="py-4 text-center text-sm text-muted-foreground">
-                    No cleaning operations in this category.
-                  </p>
+                  <div className="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-900 dark:bg-green-950/20">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600" />
+                    <div>
+                      <p className="text-sm font-medium text-green-800 dark:text-green-200">No issues detected</p>
+                      <p className="text-xs text-green-700 dark:text-green-300 mt-0.5">
+                        {cat.key === "cat-1" && "No duplicate rows or identifier conflicts found in the dataset."}
+                        {cat.key === "cat-2" && "No response quality issues detected — no speeders, straightliners, or bot patterns identified."}
+                        {cat.key === "cat-3" && "All variables are consistently coded. No encoding inconsistencies or recoding needed."}
+                        {cat.key === "cat-4" && "Missing data is within acceptable limits across all variables."}
+                        {cat.key === "cat-5" && "No statistical outliers detected outside acceptable bounds."}
+                        {cat.key === "cat-6" && "All skip logic routing is consistent with the survey instrument."}
+                        {cat.key === "cat-7" && "No custom cleaning operations were applied."}
+                      </p>
+                    </div>
+                  </div>
                 )}
 
                 {/* Applied operations */}

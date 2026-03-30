@@ -39,6 +39,7 @@ import {
   Loader2,
   Undo2,
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/lib/toast";
 import type { Tables, Json } from "@/lib/types/database";
 
@@ -524,6 +525,9 @@ export function Step4Quality({
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [applyingIssueId, setApplyingIssueId] = useState<string | null>(null);
   const [fixApplyTaskId, setFixApplyTaskId] = useState<string | null>(null);
+  // Custom action text per issue
+  const [customTexts, setCustomTexts] = useState<Record<string, string>>({});
+  const [showCustomInput, setShowCustomInput] = useState<Record<string, boolean>>({});
   const fixApplyProgress = useTaskProgress(fixApplyTaskId);
 
   useEffect(() => {
@@ -579,29 +583,65 @@ export function Step4Quality({
 
   const handleApplyFix = useCallback(
     async (issue: AuditIssue) => {
-      if (!datasetId || !issue.matchingOpId) return;
+      if (!datasetId) return;
       setApplyingIssueId(issue.id);
       try {
-        // Approve the op first
-        await supabase
-          .from("cleaning_operations")
-          // @ts-ignore — supabase update type inference
-          .update({ status: "approved" })
-          .eq("id", issue.matchingOpId);
+        const customText = customTexts[issue.id]?.trim();
 
-        const { taskId } = await dispatchTask(
-          project.id,
-          "apply_cleaning_operation",
-          { operation_id: issue.matchingOpId, dataset_id: datasetId },
-          datasetId,
-        );
-        setFixApplyTaskId(taskId);
-      } catch {
+        if (customText) {
+          // Insert custom cleaning operation
+          const { data: opData, error: opErr } = await supabase
+            .from("cleaning_operations")
+            // @ts-ignore
+            .insert({
+              dataset_id: datasetId,
+              operation_type: "custom",
+              column_name: issue.columnName ?? null,
+              description: customText,
+              reasoning: `User-defined action for: ${issue.title}`,
+              confidence: 1.0,
+              status: "approved",
+              priority: 99,
+              parameters: {},
+            })
+            .select("id")
+            .single();
+          if (opErr || !opData) throw new Error(opErr?.message ?? "Failed to save custom action");
+          const { taskId } = await dispatchTask(
+            project.id,
+            "apply_cleaning_operation",
+            { operation_id: (opData as { id: string }).id, dataset_id: datasetId },
+            datasetId,
+          );
+          setFixApplyTaskId(taskId);
+        } else if (issue.matchingOpId) {
+          await supabase
+            .from("cleaning_operations")
+            // @ts-ignore
+            .update({ status: "approved" })
+            .eq("id", issue.matchingOpId);
+          const { taskId } = await dispatchTask(
+            project.id,
+            "apply_cleaning_operation",
+            { operation_id: issue.matchingOpId, dataset_id: datasetId },
+            datasetId,
+          );
+          setFixApplyTaskId(taskId);
+        } else {
+          // No op and no custom text — just mark dismissed
+          handleDismiss(issue.id);
+          setApplyingIssueId(null);
+          return;
+        }
+        // Clear custom input after apply
+        setCustomTexts((prev) => { const next = { ...prev }; delete next[issue.id]; return next; });
+        setShowCustomInput((prev) => { const next = { ...prev }; delete next[issue.id]; return next; });
+      } catch (e) {
         toast("Failed to apply fix", { variant: "error" });
         setApplyingIssueId(null);
       }
     },
-    [datasetId, dispatchTask, project.id, supabase],
+    [datasetId, dispatchTask, project.id, supabase, customTexts, handleDismiss],
   );
 
   const handleContinue = useCallback(async () => {
@@ -618,6 +658,17 @@ export function Step4Quality({
     router.refresh();
     router.push(`/projects/${project.id}/step/5`);
   }, [router, project.id, project.pipeline_status, supabase]);
+
+  const handleApproveAll = useCallback(async () => {
+    // Dismiss all active non-info issues and navigate to cleaning
+    const activeIssues = auditSections.flatMap((s) =>
+      s.issues.filter((i) => !dismissedIds.has(i.id) && !i.infoOnly)
+    );
+    if (activeIssues.length > 0) {
+      setDismissedIds((prev) => new Set([...prev, ...activeIssues.map((i) => i.id)]));
+    }
+    await handleContinue();
+  }, [auditSections, dismissedIds, handleContinue]);
 
   /* ================================================================ */
   /*  No dataset guard                                                 */
@@ -861,27 +912,55 @@ export function Step4Quality({
                       </div>
 
                       {!issue.infoOnly && (
-                        <div className="flex gap-2 pt-1">
-                          {issue.matchingOpId && (
+                        <div className="space-y-2 pt-1">
+                          {/* Custom action input */}
+                          {showCustomInput[issue.id] ? (
+                            <div className="space-y-1.5">
+                              <Textarea
+                                placeholder="Describe your custom action in plain language…"
+                                rows={2}
+                                className="text-sm"
+                                value={customTexts[issue.id] ?? ""}
+                                onChange={(e) =>
+                                  setCustomTexts((prev) => ({ ...prev, [issue.id]: e.target.value }))
+                                }
+                              />
+                            </div>
+                          ) : null}
+
+                          <div className="flex flex-wrap gap-2">
+                            {/* Primary action */}
                             <Button
                               size="sm"
                               onClick={() => handleApplyFix(issue)}
-                              disabled={applyingIssueId === issue.id}
+                              disabled={applyingIssueId === issue.id || (!issue.matchingOpId && !customTexts[issue.id]?.trim())}
                             >
-                              {applyingIssueId === issue.id && (
+                              {applyingIssueId === issue.id ? (
                                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                              )}
-                              Apply Fix
+                              ) : null}
+                              {issue.matchingOpId ? "Apply Fix" : customTexts[issue.id]?.trim() ? "Apply Custom Action" : "Apply Fix"}
                             </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-muted-foreground"
-                            onClick={() => handleDismiss(issue.id)}
-                          >
-                            Ignore
-                          </Button>
+
+                            {/* Toggle custom input */}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                setShowCustomInput((prev) => ({ ...prev, [issue.id]: !prev[issue.id] }))
+                              }
+                            >
+                              {showCustomInput[issue.id] ? "Cancel custom" : "Custom action…"}
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-muted-foreground"
+                              onClick={() => handleDismiss(issue.id)}
+                            >
+                              Ignore
+                            </Button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -934,13 +1013,24 @@ export function Step4Quality({
         })}
       </Accordion>
 
-      {/* Continue button */}
+      {/* Bottom action row */}
       {hasResults && (
-        <div className="flex justify-end border-t pt-4">
-          <Button onClick={handleContinue}>
-            Continue to Step 5: Cleaning
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
+        <div className="flex items-center justify-between border-t pt-4">
+          <div className="text-sm text-muted-foreground">
+            {totalIssueCount === 0
+              ? "✓ No issues found"
+              : `${totalIssueCount} issue${totalIssueCount !== 1 ? "s" : ""} found`}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleContinue}>
+              Continue to Cleaning
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+            <Button onClick={handleApproveAll}>
+              Approve All & Proceed
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
         </div>
       )}
     </div>
