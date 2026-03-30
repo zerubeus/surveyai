@@ -1159,6 +1159,13 @@ export function Step4Quality({
                 </AccordionTrigger>
                 <AccordionContent className="px-4 pb-4">
 
+                {activeIssues.length === 0 && (
+                  <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-950/30 dark:text-green-300">
+                    <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-green-600 dark:text-green-400" />
+                    <span>No issues detected in this area — your data looks clean here.</span>
+                  </div>
+                )}
+
                 <div className="space-y-3">
                   {activeIssues.map((issue) => {
                     // Find matching cleaning operation for suggested fix label
