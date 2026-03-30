@@ -1323,6 +1323,17 @@ export function Step4Quality({
           appliedOps={cleaning.applied}
           isOpen={isChangesSheetOpen}
           onClose={() => setIsChangesSheetOpen(false)}
+          onUndoOp={async (opId: string) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase as any)
+              .from("cleaning_operations")
+              .update({
+                status: "undone",
+                undone_at: new Date().toISOString(),
+              })
+              .eq("id", opId);
+            cleaning.refetch();
+          }}
         />
       )}
     </div>

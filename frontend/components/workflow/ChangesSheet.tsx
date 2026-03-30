@@ -3,16 +3,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createBrowserClient } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   ChevronLeft,
   ChevronRight,
-  Filter,
   Loader2,
+  RotateCcw,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Tables, Json } from "@/lib/types/database";
+import type { Tables } from "@/lib/types/database";
 
 type CleaningOperation = Tables<"cleaning_operations">;
 type Dataset = Tables<"datasets">;
@@ -22,6 +28,7 @@ interface ChangesSheetProps {
   appliedOps: CleaningOperation[];
   isOpen: boolean;
   onClose: () => void;
+  onUndoOp?: (opId: string) => void;
 }
 
 interface AfterSnapshot {
@@ -41,6 +48,7 @@ export function ChangesSheet({
   appliedOps,
   isOpen,
   onClose,
+  onUndoOp,
 }: ChangesSheetProps) {
   const supabase = createBrowserClient();
 
@@ -52,8 +60,9 @@ export function ChangesSheet({
 
   // View state
   const [showOnlyChanged, setShowOnlyChanged] = useState(false);
-  const [selectedColumn, setSelectedColumn] = useState<string | null>(null);
+  const [selectedColumn, setSelectedColumn] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(0);
+  const [undoingOpId, setUndoingOpId] = useState<string | null>(null);
 
   // Build set of changed cells: "rowIndex-columnName"
   const changedCells = useMemo(() => {
@@ -96,9 +105,6 @@ export function ChangesSheet({
     return indices;
   }, [appliedOps]);
 
-  // Total changed cells count
-  const totalChangedCells = changedCells.size;
-
   // Filter data based on view settings
   const filteredData = useMemo(() => {
     let data = csvData;
@@ -120,7 +126,7 @@ export function ChangesSheet({
 
   // Columns to display (filtered or all)
   const displayColumns = useMemo(() => {
-    if (selectedColumn) {
+    if (selectedColumn && selectedColumn !== "all") {
       const idx = csvHeaders.indexOf(selectedColumn);
       return idx >= 0 ? [{ name: selectedColumn, index: idx }] : [];
     }
@@ -215,7 +221,30 @@ export function ChangesSheet({
     [appliedOps],
   );
 
+  // Get rows affected per op
+  const getRowsAffected = useCallback((op: CleaningOperation): number => {
+    if (op.affected_rows_estimate != null) {
+      return op.affected_rows_estimate;
+    }
+    const snapshot = op.after_snapshot as AfterSnapshot | null;
+    return snapshot?.changed_row_indices?.length ?? 0;
+  }, []);
+
+  // Handle undo operation
+  const handleUndo = useCallback(
+    async (opId: string) => {
+      if (onUndoOp) {
+        setUndoingOpId(opId);
+        await onUndoOp(opId);
+        setUndoingOpId(null);
+      }
+    },
+    [onUndoOp],
+  );
+
   if (!isOpen) return null;
+
+  const totalChangedRows = changedRowIndices.size;
 
   return (
     <>
@@ -239,7 +268,7 @@ export function ChangesSheet({
           <div>
             <h2 className="text-lg font-semibold">Applied Changes Preview</h2>
             <p className="text-sm text-muted-foreground">
-              {totalChangedCells} cell{totalChangedCells !== 1 ? "s" : ""} modified
+              {changedCells.size} cell{changedCells.size !== 1 ? "s" : ""} modified
               across {changedColumns.length} column{changedColumns.length !== 1 ? "s" : ""}
             </p>
           </div>
@@ -248,200 +277,266 @@ export function ChangesSheet({
           </Button>
         </div>
 
-        {/* Toolbar */}
-        <div className="flex items-center gap-4 border-b px-6 py-3 flex-wrap">
-          {/* Row filter toggle */}
-          <Button
-            variant={showOnlyChanged ? "default" : "outline"}
-            size="sm"
-            onClick={() => setShowOnlyChanged(!showOnlyChanged)}
-          >
-            <Filter className="mr-1.5 h-3.5 w-3.5" />
-            {showOnlyChanged ? "Showing changed rows" : "Show all rows"}
-          </Button>
+        {/* Body: sidebar + main content */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left sidebar - Applied changes */}
+          <div className="w-72 border-r bg-muted/30 flex flex-col">
+            <div className="px-4 py-3 border-b">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                Applied Changes
+              </h3>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              {appliedOps.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  No changes applied yet
+                </p>
+              ) : (
+                appliedOps.map((op) => {
+                  const snapshot = op.after_snapshot as AfterSnapshot | null;
+                  const colName = snapshot?.changed_column ?? op.column_name;
+                  const rowsAffected = getRowsAffected(op);
 
-          {/* Column filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Column:</span>
-            <Button
-              variant={selectedColumn === null ? "default" : "outline"}
-              size="sm"
-              onClick={() => setSelectedColumn(null)}
-            >
-              All
-            </Button>
-            {changedColumns.slice(0, 5).map((col) => (
-              <Button
-                key={col}
-                variant={selectedColumn === col ? "default" : "outline"}
-                size="sm"
-                onClick={() => setSelectedColumn(col)}
-              >
-                {col}
-              </Button>
-            ))}
-            {changedColumns.length > 5 && (
-              <span className="text-xs text-muted-foreground">
-                +{changedColumns.length - 5} more
-              </span>
-            )}
+                  return (
+                    <div
+                      key={op.id}
+                      className="rounded-lg border bg-background p-3 space-y-2"
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="text-green-600 dark:text-green-400 mt-0.5">✓</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium leading-tight">
+                            {formatOpType(op.operation_type)}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {colName && (
+                              <code className="font-mono">{colName}</code>
+                            )}
+                            {colName && rowsAffected > 0 && " · "}
+                            {rowsAffected > 0 && `${rowsAffected} rows`}
+                          </p>
+                        </div>
+                      </div>
+                      {onUndoOp && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="w-full h-7 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => handleUndo(op.id)}
+                          disabled={undoingOpId === op.id}
+                        >
+                          {undoingOpId === op.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          ) : (
+                            <RotateCcw className="h-3 w-3 mr-1" />
+                          )}
+                          Undo
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-auto p-4">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-64">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : error ? (
-            <div className="flex items-center justify-center h-64 text-red-500">
-              {error}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="px-3 py-2 text-left font-medium text-muted-foreground w-16">
-                      Row
-                    </th>
-                    {displayColumns.map((col) => (
-                      <th
-                        key={col.name}
-                        className={cn(
-                          "px-3 py-2 text-left font-medium",
-                          changedColumns.includes(col.name)
-                            ? "text-amber-700 dark:text-amber-400"
-                            : "text-muted-foreground",
-                        )}
-                      >
-                        {col.name}
-                        {changedColumns.includes(col.name) && (
-                          <Badge
-                            variant="outline"
-                            className="ml-2 text-xs bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
-                          >
-                            modified
-                          </Badge>
-                        )}
-                      </th>
+          {/* Main content area */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Toolbar */}
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              {/* Left: Row filter toggle */}
+              <div className="inline-flex rounded-lg border p-0.5 bg-muted/50">
+                <button
+                  className={cn(
+                    "px-3 py-1 text-sm rounded-md transition-colors",
+                    !showOnlyChanged
+                      ? "bg-background shadow-sm font-medium"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  onClick={() => setShowOnlyChanged(false)}
+                >
+                  All rows
+                </button>
+                <button
+                  className={cn(
+                    "px-3 py-1 text-sm rounded-md transition-colors",
+                    showOnlyChanged
+                      ? "bg-background shadow-sm font-medium"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  onClick={() => setShowOnlyChanged(true)}
+                >
+                  Changed rows only
+                </button>
+              </div>
+
+              {/* Right: Column focus dropdown */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Focus column</span>
+                <Select value={selectedColumn} onValueChange={setSelectedColumn}>
+                  <SelectTrigger className="w-[180px] h-8">
+                    <SelectValue placeholder="All columns" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All columns</SelectItem>
+                    {changedColumns.map((col) => (
+                      <SelectItem key={col} value={col}>
+                        <span className="flex items-center gap-2">
+                          <span className="text-amber-500">●</span>
+                          {col}
+                        </span>
+                      </SelectItem>
                     ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedData.map((row, displayIdx) => {
-                    // Calculate actual row index
-                    const actualIdx = showOnlyChanged
-                      ? Array.from(changedRowIndices).sort((a, b) => a - b)[
-                          currentPage * ROWS_PER_PAGE + displayIdx
-                        ]
-                      : currentPage * ROWS_PER_PAGE + displayIdx;
+                    {csvHeaders
+                      .filter((h) => !changedColumns.includes(h))
+                      .map((col) => (
+                        <SelectItem key={col} value={col}>
+                          <span className="text-muted-foreground">{col}</span>
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-                    const isChangedRow = changedRowIndices.has(actualIdx);
-
-                    return (
-                      <tr
-                        key={displayIdx}
-                        className={cn(
-                          "border-b",
-                          isChangedRow && "bg-amber-50/50 dark:bg-amber-950/20",
-                        )}
-                      >
-                        <td className="px-3 py-2 text-muted-foreground font-mono text-xs">
-                          {actualIdx + 1}
-                        </td>
-                        {displayColumns.map((col) => {
-                          const cellKey = `${actualIdx}-${col.name}`;
-                          const isChanged = changedCells.has(cellKey);
-                          const opType = isChanged
-                            ? getOperationType(actualIdx, col.name)
-                            : null;
-                          const value = row[col.index] ?? "";
-
-                          return (
-                            <td
-                              key={col.name}
-                              className={cn(
-                                "px-3 py-2",
-                                isChanged &&
-                                  "bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 rounded",
-                              )}
-                            >
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={cn(
-                                    "truncate max-w-[200px]",
-                                    isChanged && "font-medium",
-                                  )}
-                                  title={value}
-                                >
-                                  {value || (
-                                    <span className="text-muted-foreground italic">
-                                      empty
-                                    </span>
-                                  )}
-                                </span>
-                                {opType && (
-                                  <Badge
-                                    variant="outline"
-                                    className="text-[10px] px-1 py-0 bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700 shrink-0"
-                                  >
-                                    {formatOpType(opType)}
-                                  </Badge>
-                                )}
-                              </div>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-
-              {filteredData.length === 0 && (
-                <div className="text-center py-12 text-muted-foreground">
-                  No data to display
+            {/* Row count + Pagination above table */}
+            <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30">
+              <span className="text-sm text-muted-foreground">
+                Showing {filteredData.length} rows · {totalChangedRows} changed
+              </span>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2"
+                    onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
+                    disabled={currentPage === 0}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-xs text-muted-foreground px-2">
+                    {currentPage + 1} / {totalPages}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
+                    disabled={currentPage >= totalPages - 1}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
                 </div>
               )}
             </div>
-          )}
-        </div>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t px-6 py-3">
-            <span className="text-sm text-muted-foreground">
-              Showing {currentPage * ROWS_PER_PAGE + 1}-
-              {Math.min((currentPage + 1) * ROWS_PER_PAGE, filteredData.length)} of{" "}
-              {filteredData.length} rows
-            </span>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
-                disabled={currentPage === 0}
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Previous
-              </Button>
-              <span className="text-sm text-muted-foreground px-2">
-                Page {currentPage + 1} of {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
-                disabled={currentPage >= totalPages - 1}
-              >
-                Next
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+            {/* Content */}
+            <div className="flex-1 overflow-auto p-4">
+              {isLoading ? (
+                <div className="flex items-center justify-center h-64">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : error ? (
+                <div className="flex items-center justify-center h-64 text-red-500">
+                  {error}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="px-3 py-1.5 text-left font-medium text-muted-foreground w-16">
+                          Row
+                        </th>
+                        {displayColumns.map((col) => (
+                          <th
+                            key={col.name}
+                            className={cn(
+                              "px-3 py-1.5 text-left font-medium",
+                              changedColumns.includes(col.name)
+                                ? "text-foreground"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            <span className="flex items-center gap-1.5">
+                              {changedColumns.includes(col.name) && (
+                                <span className="text-amber-500 text-xs">●</span>
+                              )}
+                              {col.name}
+                            </span>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedData.map((row, displayIdx) => {
+                        // Calculate actual row index
+                        const actualIdx = showOnlyChanged
+                          ? Array.from(changedRowIndices).sort((a, b) => a - b)[
+                              currentPage * ROWS_PER_PAGE + displayIdx
+                            ]
+                          : currentPage * ROWS_PER_PAGE + displayIdx;
+
+                        const isChangedRow = changedRowIndices.has(actualIdx);
+
+                        return (
+                          <tr
+                            key={displayIdx}
+                            className={cn(
+                              "border-b",
+                              isChangedRow && "bg-amber-50/50 dark:bg-amber-950/20",
+                            )}
+                          >
+                            <td className="px-3 py-1.5 text-muted-foreground font-mono text-xs">
+                              {actualIdx + 1}
+                            </td>
+                            {displayColumns.map((col) => {
+                              const cellKey = `${actualIdx}-${col.name}`;
+                              const isChanged = changedCells.has(cellKey);
+                              const value = row[col.index] ?? "";
+
+                              return (
+                                <td
+                                  key={col.name}
+                                  className={cn(
+                                    "px-3 py-1.5",
+                                    isChanged &&
+                                      "bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 rounded",
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "truncate max-w-[200px] block",
+                                      isChanged && "font-medium",
+                                    )}
+                                    title={value}
+                                  >
+                                    {value || (
+                                      <span className="text-muted-foreground italic">
+                                        empty
+                                      </span>
+                                    )}
+                                  </span>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+
+                  {filteredData.length === 0 && (
+                    <div className="text-center py-12 text-muted-foreground">
+                      No data to display
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
-        )}
+        </div>
       </div>
     </>
   );
@@ -481,9 +576,22 @@ function parseCSVLine(line: string): string[] {
  * Format operation type for display
  */
 function formatOpType(opType: string): string {
-  return opType
+  const labels: Record<string, string> = {
+    remove_duplicates: "Removed duplicates",
+    impute_value: "Imputed missing values",
+    fix_encoding: "Standardized text",
+    standardize_missing: "Standardized missing",
+    fix_outlier: "Capped outliers",
+    recode_values: "Recoded values",
+    rename_column: "Renamed column",
+    fix_data_type: "Fixed data type",
+    fix_skip_logic: "Fixed skip logic",
+    drop_column: "Dropped column",
+    split_column: "Split column",
+    merge_columns: "Merged columns",
+    custom: "Custom operation",
+  };
+  return labels[opType] ?? opType
     .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase())
-    .replace(/^Fix /, "")
-    .replace(/^Standardize /, "Std ");
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
