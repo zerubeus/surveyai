@@ -374,13 +374,13 @@ export function ChangesSheet({
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Focus column</span>
                 <Select value={selectedColumn} onValueChange={setSelectedColumn}>
-                  <SelectTrigger className="w-[180px] h-8">
+                  <SelectTrigger className="w-48 h-8 text-sm">
                     <SelectValue placeholder="All columns" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All columns</SelectItem>
+                  <SelectContent className="w-48 max-h-64 overflow-y-auto">
+                    <SelectItem value="all" className="text-sm">All columns</SelectItem>
                     {changedColumns.map((col) => (
-                      <SelectItem key={col} value={col}>
+                      <SelectItem key={col} value={col} className="text-sm">
                         <span className="flex items-center gap-2">
                           <span className="text-amber-500">●</span>
                           {col}
@@ -390,7 +390,7 @@ export function ChangesSheet({
                     {csvHeaders
                       .filter((h) => !changedColumns.includes(h))
                       .map((col) => (
-                        <SelectItem key={col} value={col}>
+                        <SelectItem key={col} value={col} className="text-sm">
                           <span className="text-muted-foreground">{col}</span>
                         </SelectItem>
                       ))}

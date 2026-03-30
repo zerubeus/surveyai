@@ -549,6 +549,11 @@ export function Step4Quality({
   }, [project.additional_context]);
 
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(initialDismissedIds);
+
+  // Track latest saved context to avoid stale SSR snapshot
+  const savedContextRef = useRef<Record<string, unknown>>(
+    project.additional_context ? JSON.parse(project.additional_context as string) : {}
+  );
   const [applyingIssueId, setApplyingIssueId] = useState<string | null>(null);
   const [fixApplyTaskId, setFixApplyTaskId] = useState<string | null>(null);
   // Custom action text per issue
@@ -561,23 +566,20 @@ export function Step4Quality({
     return new Set(cleaning.applied.map((op) => op.id));
   }, [cleaning.applied]);
 
+  // State for "Apply All" bulk operation
+  const [isApplyingAll, setIsApplyingAll] = useState(false);
+  const [applyAllProgress, setApplyAllProgress] = useState<{ current: number; total: number } | null>(null);
+
   // Debounce-save dismissedIds to project.additional_context
   const dismissedIdsRef = useRef(dismissedIds);
   dismissedIdsRef.current = dismissedIds;
 
   useEffect(() => {
-    // Skip if dismissedIds hasn't changed from initial
-    if (dismissedIds.size === initialDismissedIds.size &&
-        [...dismissedIds].every((id) => initialDismissedIds.has(id))) {
-      return;
-    }
+    // Always save on debounce (1s prevents excessive writes)
     const t = setTimeout(async () => {
       try {
-        const currentCtx = project.additional_context
-          ? JSON.parse(project.additional_context)
-          : {};
         const newCtx = {
-          ...currentCtx,
+          ...savedContextRef.current,
           quality_dismissed_ids: [...dismissedIdsRef.current],
         };
         await supabase
@@ -585,12 +587,14 @@ export function Step4Quality({
           // @ts-ignore — supabase update type inference
           .update({ additional_context: JSON.stringify(newCtx) })
           .eq("id", project.id);
+        // Update ref after successful save
+        savedContextRef.current = newCtx;
       } catch (e) {
         console.error("Failed to persist dismissed IDs:", e);
       }
     }, 1000);
     return () => clearTimeout(t);
-  }, [dismissedIds, initialDismissedIds, project.additional_context, project.id, supabase]);
+  }, [dismissedIds, project.id, supabase]);
 
   useEffect(() => {
     if (
@@ -632,6 +636,34 @@ export function Step4Quality({
     () => auditSections.reduce((sum, s) => sum + (s.key === "step-1" ? 0 : s.issues.length), 0),
     [auditSections],
   );
+
+  // Sections with issues (excluding step-1 info section)
+  const sectionsWithIssues = useMemo(() => {
+    return auditSections.filter((s) => {
+      const activeIssues = s.issues.filter((i) => !dismissedIds.has(i.id));
+      return activeIssues.length > 0 && s.key !== "step-1";
+    });
+  }, [auditSections, dismissedIds]);
+
+  // Clean sections (no active issues, excluding step-1)
+  const cleanSections = useMemo(() => {
+    return auditSections.filter((s) => {
+      const activeIssues = s.issues.filter((i) => !dismissedIds.has(i.id));
+      return activeIssues.length === 0 && s.key !== "step-1";
+    });
+  }, [auditSections, dismissedIds]);
+
+  // Info section (step-1)
+  const infoSection = useMemo(() => {
+    return auditSections.find((s) => s.key === "step-1");
+  }, [auditSections]);
+
+  // Default open sections: only sections with issues
+  const defaultOpenSections = useMemo(() => {
+    const withIssues = sectionsWithIssues.map((s) => s.key);
+    // If no issues anywhere, default to step-1
+    return withIssues.length > 0 ? withIssues : ["step-1"];
+  }, [sectionsWithIssues]);
 
   /* ---------- Compute displayScore factoring in unresolved issues ---------- */
   const displayScore = useMemo(() => {
@@ -781,6 +813,68 @@ export function Step4Quality({
     }
     await handleContinueToAnalysis();
   }, [auditSections, dismissedIds, handleContinueToAnalysis]);
+
+  const handleApplyAllFixes = useCallback(async () => {
+    if (!datasetId) return;
+
+    // Get current user for approved_by field
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const userId = user?.id;
+    if (!userId) {
+      toast("Not authenticated", { variant: "error" });
+      return;
+    }
+
+    // Find all active non-info issues with matchingOpId that aren't already applied
+    const fixableIssues = auditSections.flatMap((s) =>
+      s.issues.filter((i) =>
+        !dismissedIds.has(i.id) &&
+        !i.infoOnly &&
+        i.matchingOpId &&
+        !appliedOpIds.has(i.matchingOpId)
+      )
+    );
+
+    if (fixableIssues.length === 0) {
+      toast("No fixes to apply");
+      return;
+    }
+
+    setIsApplyingAll(true);
+    setApplyAllProgress({ current: 0, total: fixableIssues.length });
+
+    try {
+      // Approve all matching cleaning operations
+      const opIds = fixableIssues.map((i) => i.matchingOpId!);
+      await supabase
+        .from("cleaning_operations")
+        // @ts-ignore
+        .update({ status: "approved", approved_by: userId })
+        .in("id", opIds);
+
+      // Dispatch tasks for each operation
+      for (let i = 0; i < fixableIssues.length; i++) {
+        const issue = fixableIssues[i];
+        setApplyAllProgress({ current: i + 1, total: fixableIssues.length });
+        await dispatchTask(
+          project.id,
+          "apply_cleaning_operation",
+          { operation_id: issue.matchingOpId!, dataset_id: datasetId, approved_by: userId },
+          datasetId,
+        );
+      }
+
+      toast(`Applied ${fixableIssues.length} fixes`, { variant: "success" });
+    } catch (e) {
+      toast("Failed to apply some fixes", { variant: "error" });
+      console.error("handleApplyAllFixes error:", e);
+    } finally {
+      setIsApplyingAll(false);
+      setApplyAllProgress(null);
+    }
+  }, [auditSections, dismissedIds, appliedOpIds, datasetId, project.id, supabase, dispatchTask]);
 
   const handleApproveAll = useCallback(async () => {
     // Get current user for approved_by field
@@ -960,67 +1054,109 @@ export function Step4Quality({
         </Card>
       )}
 
-      {/* Header card — quality score + summary */}
+      {/* Header card — quality score + summary + action buttons */}
       <Card>
-        <CardContent className="flex items-center gap-6 p-6">
-          {overallQuality !== null ? (
-            <ScoreRing score={displayScore} />
-          ) : (
-            <div className="flex h-24 w-24 items-center justify-center rounded-full border-4 border-muted">
-              <span className="text-lg font-bold text-muted-foreground">--</span>
-            </div>
-          )}
-          <div>
-            {overallQuality !== null && (
-              <p className={`text-lg font-semibold ${scoreColor(displayScore)}`}>
-                {scoreVerdict(displayScore)}
-              </p>
+        <CardContent className="flex items-center justify-between gap-6 p-6">
+          <div className="flex items-center gap-6">
+            {overallQuality !== null ? (
+              <ScoreRing score={displayScore} />
+            ) : (
+              <div className="flex h-24 w-24 items-center justify-center rounded-full border-4 border-muted">
+                <span className="text-lg font-bold text-muted-foreground">--</span>
+              </div>
             )}
-            <p className="text-sm text-muted-foreground">
-              {rowCount.toLocaleString()} rows &middot;{" "}
-              {colCount} columns &middot;{" "}
-              {totalIssueCount} issue{totalIssueCount !== 1 ? "s" : ""} found
-            </p>
+            <div>
+              {overallQuality !== null && (
+                <p className={`text-lg font-semibold ${scoreColor(displayScore)}`}>
+                  {scoreVerdict(displayScore)}
+                </p>
+              )}
+              <p className="text-sm text-muted-foreground">
+                {rowCount.toLocaleString()} rows &middot;{" "}
+                {colCount} columns &middot;{" "}
+                {totalIssueCount} issue{totalIssueCount !== 1 ? "s" : ""} found
+              </p>
+            </div>
           </div>
+          {/* Header action buttons */}
+          {hasResults && (() => {
+            const appliedOps = cleaning.all.filter((op) => op.status === "applied");
+            const appliedCount = appliedOps.length;
+            const totalChangedCells = appliedOps.reduce((sum, op) => {
+              const snapshot = op.after_snapshot as { changed_row_indices?: number[] } | null;
+              return sum + (snapshot?.changed_row_indices?.length ?? 0);
+            }, 0);
+            const unresolvedFixable = auditSections.flatMap((s) =>
+              s.issues.filter((i) =>
+                !dismissedIds.has(i.id) &&
+                !i.infoOnly &&
+                i.matchingOpId &&
+                !appliedOpIds.has(i.matchingOpId)
+              )
+            );
+
+            return (
+              <div className="flex items-center gap-2">
+                {unresolvedFixable.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleApplyAllFixes}
+                    disabled={isApplyingAll}
+                  >
+                    {isApplyingAll ? (
+                      <>
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        Applying {applyAllProgress?.current ?? 0}/{applyAllProgress?.total ?? 0}...
+                      </>
+                    ) : (
+                      <>Apply all fixes ({unresolvedFixable.length})</>
+                    )}
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsChangesSheetOpen(true)}
+                >
+                  <Eye className="mr-1.5 h-3.5 w-3.5" />
+                  {appliedCount > 0
+                    ? `View data & changes (${totalChangedCells} cells)`
+                    : "Preview dataset"}
+                </Button>
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
 
-      {/* 7-step audit accordion */}
-      <Accordion type="multiple" defaultValue={["step-1"]} className="space-y-2">
-        {auditSections.map((section) => {
-          const activeIssues = section.issues.filter((i) => !dismissedIds.has(i.id));
-          const sectionDismissed = section.issues.filter((i) => dismissedIds.has(i.id));
-          const issueCount = section.key === "step-1" ? 0 : activeIssues.length;
-          const sev = section.key === "step-1" ? null : worstSeverity(activeIssues);
+      {/* Audit sections with issues */}
+      {sectionsWithIssues.length > 0 && (
+        <Accordion type="multiple" defaultValue={defaultOpenSections} className="space-y-2">
+          {sectionsWithIssues.map((section) => {
+            const activeIssues = section.issues.filter((i) => !dismissedIds.has(i.id));
+            const sectionDismissed = section.issues.filter((i) => dismissedIds.has(i.id));
+            const issueCount = activeIssues.length;
+            const sev = worstSeverity(activeIssues);
 
-          return (
-            <AccordionItem
-              key={section.key}
-              value={section.key}
-              className="rounded-lg border"
-            >
-              <AccordionTrigger className="px-4 hover:no-underline">
-                <div className="flex flex-1 items-center gap-3 text-left">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                    {section.stepNum}
-                  </span>
-                  <span className="text-sm font-medium">{section.name}</span>
-                  {issueCount > 0 && sev && (
-                    <SeverityCountBadge severity={sev} count={issueCount} />
-                  )}
-                  {issueCount === 0 && section.key !== "step-1" && (
-                    <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs">
-                      All clear &#10003;
-                    </Badge>
-                  )}
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="px-4 pb-4">
-                {activeIssues.length === 0 && section.key !== "step-1" && (
-                  <p className="py-4 text-center text-sm text-muted-foreground">
-                    No issues in this category.
-                  </p>
-                )}
+            return (
+              <AccordionItem
+                key={section.key}
+                value={section.key}
+                className="rounded-lg border"
+              >
+                <AccordionTrigger className="px-4 hover:no-underline">
+                  <div className="flex flex-1 items-center gap-3 text-left">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                      {section.stepNum}
+                    </span>
+                    <span className="text-sm font-medium">{section.name}</span>
+                    {issueCount > 0 && sev && (
+                      <SeverityCountBadge severity={sev} count={issueCount} />
+                    )}
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-4 pb-4">
 
                 <div className="space-y-3">
                   {activeIssues.map((issue) => {
@@ -1154,6 +1290,7 @@ export function Step4Quality({
                                 size="sm"
                                 onClick={() => handleApplyFix(issue)}
                                 disabled={
+                                  isApplyingAll ||
                                   applyingIssueId === issue.id ||
                                   (!cleaningSuggestionsLoading && !issue.matchingOpId && !customTexts[issue.id]?.trim())
                                 }
@@ -1234,7 +1371,48 @@ export function Step4Quality({
             </AccordionItem>
           );
         })}
-      </Accordion>
+        </Accordion>
+      )}
+
+      {/* Clean sections summary */}
+      {cleanSections.length > 0 && (
+        <p className="text-sm text-muted-foreground flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4 text-green-500" />
+          No issues found in: {cleanSections.map((s) => s.name).join(", ")}
+        </p>
+      )}
+
+      {/* Info section (Initial Data Audit) at bottom */}
+      {infoSection && infoSection.issues.length > 0 && (
+        <Accordion type="single" collapsible className="mt-2">
+          <AccordionItem value="step-1" className="rounded-lg border">
+            <AccordionTrigger className="px-4 hover:no-underline">
+              <div className="flex flex-1 items-center gap-3 text-left">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                  1
+                </span>
+                <span className="text-sm font-medium">{infoSection.name}</span>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="px-4 pb-4">
+              <div className="space-y-3">
+                {infoSection.issues.map((issue) => (
+                  <div key={issue.id} className="rounded-lg border p-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs">
+                        info
+                      </Badge>
+                      <span className="text-sm font-medium">{issue.title}</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{issue.description}</p>
+                    <p className="text-xs text-muted-foreground">{issue.recommendation}</p>
+                  </div>
+                ))}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      )}
 
       {/* Bottom action row */}
       {hasResults && (() => {
@@ -1273,25 +1451,11 @@ export function Step4Quality({
             )}
 
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="text-sm text-muted-foreground">
-                  {totalIssueCount === 0
-                    ? "No issues found"
-                    : `${totalIssueCount} issue${totalIssueCount !== 1 ? "s" : ""} reviewed`}
-                  {hasUnresolvedFixable && ` · ${unresolvedFixable.length} pending`}
-                </div>
-                {/* View applied changes button */}
-                {appliedCount > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsChangesSheetOpen(true)}
-                  >
-                    <Eye className="mr-1.5 h-3.5 w-3.5" />
-                    View applied changes
-                    {totalChangedCells > 0 && ` (${totalChangedCells} cells)`}
-                  </Button>
-                )}
+              <div className="text-sm text-muted-foreground">
+                {totalIssueCount === 0
+                  ? "No issues found"
+                  : `${totalIssueCount} issue${totalIssueCount !== 1 ? "s" : ""} reviewed`}
+                {hasUnresolvedFixable && ` · ${unresolvedFixable.length} pending`}
               </div>
               <div className="flex gap-2">
                 {hasUnresolvedFixable ? (
