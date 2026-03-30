@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/browser";
 import { useDispatchTask } from "@/hooks/useDispatchTask";
 import { useTaskProgress } from "@/hooks/useTaskProgress";
+import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -375,6 +376,28 @@ export function Step7Visualisation({
   const { dispatchTask, isDispatching } = useDispatchTask();
   const [customTaskId, setCustomTaskId] = useState<string | null>(null);
   const customTaskProgress = useTaskProgress(customTaskId);
+  const [crossTaskId, setCrossTaskId] = useState<string | null>(null);
+  const crossTaskProgress = useTaskProgress(crossTaskId);
+  const crossAnalysisDispatched = useRef(false);
+
+  // Auto-dispatch cross-analysis on first load when no cross-analysis charts exist
+  useEffect(() => {
+    if (!datasetId || crossAnalysisDispatched.current) return;
+    const hasCrossCharts = initialCharts.some((c) => {
+      const config = c.config as Record<string, unknown> | null;
+      return config && (config as Record<string, unknown>).is_cross_analysis === true;
+    });
+    if (hasCrossCharts) return; // Already generated
+    crossAnalysisDispatched.current = true;
+    dispatchTask(
+      projectId,
+      "generate_cross_analysis",
+      { dataset_id: datasetId, project_id: projectId },
+      datasetId,
+    )
+      .then(({ taskId }) => setCrossTaskId(taskId))
+      .catch(() => { crossAnalysisDispatched.current = false; });
+  }, [datasetId, projectId, initialCharts, dispatchTask]);
 
   const [includedResultIds, setIncludedResultIds] = useState<Set<string>>(
     new Set(results.map((r) => r.id))
@@ -518,6 +541,22 @@ export function Step7Visualisation({
           <Button size="sm" variant="ghost" onClick={handleExcludeAll}>Exclude All</Button>
         </div>
       </div>
+
+      {/* Cross-analysis generating banner */}
+      {(crossTaskProgress.status === "running" || crossTaskProgress.status === "claimed" || crossTaskProgress.status === "pending") && (
+        <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+          <span>
+            <strong>AI is generating cross-analysis charts</strong> based on your research questions…{" "}
+            {crossTaskProgress.progressMessage && <span className="text-blue-700">{crossTaskProgress.progressMessage}</span>}
+          </span>
+          {crossTaskProgress.progress != null && crossTaskProgress.progress > 0 && (
+            <div className="ml-auto w-24">
+              <Progress value={crossTaskProgress.progress} className="h-1.5" />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ============================================================ */}
       {/* SECTION 1: Statistical Test Results                          */}

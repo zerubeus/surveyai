@@ -27,6 +27,7 @@ type ReportExport = Tables<"report_exports">;
 interface ExportPanelProps {
   reportId: string;
   projectId: string;
+  datasetId?: string;
   exports: ReportExport[];
   onExportComplete: () => void;
 }
@@ -34,13 +35,17 @@ interface ExportPanelProps {
 export function ExportPanel({
   reportId,
   projectId,
+  datasetId,
   exports,
   onExportComplete,
 }: ExportPanelProps) {
   const [exportTaskId, setExportTaskId] = useState<string | null>(null);
+  const [zipTaskId, setZipTaskId] = useState<string | null>(null);
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   const { dispatchTask, isDispatching } = useDispatchTask();
   const exportProgress = useTaskProgress(exportTaskId);
+  const zipProgress = useTaskProgress(zipTaskId);
+  const isZipping = zipProgress.status === "running" || zipProgress.status === "claimed" || zipProgress.status === "pending";
 
   const isExporting =
     exportProgress.status === "running" || exportProgress.status === "claimed";
@@ -89,10 +94,7 @@ export function ExportPanel({
       const { taskId } = await dispatchTask(
         projectId,
         "export_report",
-        {
-          report_id: reportId,
-          formats: ["docx", "pdf"],
-        },
+        { report_id: reportId, formats: ["docx", "pdf"] },
       );
       setExportTaskId(taskId);
     } catch {
@@ -100,9 +102,23 @@ export function ExportPanel({
     }
   }, [projectId, reportId, dispatchTask]);
 
+  const handleExportZip = useCallback(async () => {
+    try {
+      const { taskId } = await dispatchTask(
+        projectId,
+        "export_zip",
+        { report_id: reportId, dataset_id: datasetId ?? "" },
+      );
+      setZipTaskId(taskId);
+    } catch {
+      // Error handled by useDispatchTask
+    }
+  }, [projectId, reportId, datasetId, dispatchTask]);
+
   // Separate exports by format, take latest of each
   const latestDocx = exports.find((e) => e.format === "docx");
   const latestPdf = exports.find((e) => e.format === "pdf");
+  const latestZip = exports.find((e) => e.format === "zip");
 
   return (
     <Card>
@@ -149,9 +165,38 @@ export function ExportPanel({
           </p>
         )}
 
+        {/* ZIP bundle button */}
+        <Button
+          variant="outline"
+          onClick={handleExportZip}
+          disabled={isDispatching || isZipping}
+          className="w-full"
+        >
+          {isZipping ? (
+            <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Building ZIP bundle…</>
+          ) : (
+            <><Download className="mr-2 h-4 w-4" />Download Full Bundle (ZIP)</>
+          )}
+        </Button>
+        {isZipping && (
+          <div className="space-y-1">
+            <Progress value={zipProgress.progress} className="h-2" />
+            <p className="text-xs text-muted-foreground">{zipProgress.progressMessage ?? "Bundling report, charts & dataset…"}</p>
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">ZIP includes: DOCX + PDF report, all chart images, cleaned dataset CSV</p>
+
         {/* Download links */}
-        {(latestDocx || latestPdf) && (
+        {(latestDocx || latestPdf || latestZip) && (
           <div className="space-y-2">
+            {latestZip && (
+              <ExportDownloadLink
+                exp={latestZip}
+                url={signedUrls[latestZip.id]}
+                icon={<FileDown className="h-4 w-4" />}
+                label="Download ZIP Bundle"
+              />
+            )}
             {latestDocx && (
               <ExportDownloadLink
                 exp={latestDocx}

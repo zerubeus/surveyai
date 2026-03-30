@@ -120,10 +120,19 @@ def generate_report(db: SupabaseDB, task_id: str, payload: dict[str, Any]) -> No
     # Clear any existing sections (for template switch re-generation)
     db.delete("report_sections", {"report_id": report_id})
 
-    # Step 3: Build context for AI
+    # Step 3: Build context for AI (including knowledge base)
     project_context = _build_project_context(project)
     results_summary = _build_results_summary(analysis_results)
     bias_flags = [r for r in eda_results if r.get("result_type") == "bias_check"]
+
+    # Extract knowledge base for enriched prompting
+    additional_ctx_raw = project.get("additional_context") or "{}"
+    try:
+        additional_ctx = json.loads(additional_ctx_raw) if isinstance(additional_ctx_raw, str) else (additional_ctx_raw or {})
+    except Exception:
+        additional_ctx = {}
+    knowledge_base = additional_ctx.get("knowledge_base") or {}
+    project_context["knowledge_base"] = knowledge_base
 
     # Step 4: Create section scaffolds
     sections_def = TEMPLATE_SECTIONS.get(template, TEMPLATE_SECTIONS["donor"])
@@ -401,6 +410,15 @@ def _draft_section(
 
 ## Analysis Results
 {json.dumps(results_summary, indent=2, default=str)}
+
+## Data Quality & Cleaning Summary (from pipeline knowledge base)
+{json.dumps(project_context.get("knowledge_base", {}).get("quality", {}), indent=2, default=str)}
+
+### Cleaning Operations Applied
+{json.dumps(project_context.get("knowledge_base", {}).get("cleaning", {}).get("applied_operations", []), indent=2, default=str)}
+
+### Cross-Analysis Visualisations
+{json.dumps(project_context.get("knowledge_base", {}).get("cross_analysis", {}).get("pairs", []), indent=2, default=str)}
 
 ## Data Quality Flags
 {json.dumps([b.get('interpretation', b) for b in bias_flags[:10]], indent=2, default=str)}

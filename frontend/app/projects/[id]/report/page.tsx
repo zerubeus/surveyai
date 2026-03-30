@@ -397,6 +397,7 @@ export default function ReportPage() {
             <ExportPanel
               reportId={report.id}
               projectId={projectId}
+              datasetId={dataset?.id}
               exports={exports}
               onExportComplete={refetchReport}
             />

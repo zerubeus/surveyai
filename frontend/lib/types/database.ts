@@ -1228,7 +1228,9 @@ export type Database = {
         | "generate_report_section"
         | "generate_chart"
         | "export_report"
-        | "export_audit_trail";
+        | "export_audit_trail"
+        | "generate_cross_analysis"
+        | "export_zip";
       cleaning_op_status:
         | "pending"
         | "approved"
@@ -1272,7 +1274,7 @@ export type Database = {
         | "review_needed"
         | "approved"
         | "finalized";
-      export_format: "docx" | "pdf" | "pptx" | "html";
+      export_format: "docx" | "pdf" | "pptx" | "html" | "zip";
     };
     CompositeTypes: Record<string, never>;
   };

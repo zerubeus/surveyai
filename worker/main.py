@@ -27,7 +27,8 @@ from services.cleaning_executor import apply_cleaning_operation
 from services.analysis_planner import generate_analysis_plan
 from services.analysis_executor import run_analysis
 from services.report_service import generate_report
-from services.export_service import export_report
+from services.export_service import export_report, export_zip
+from services.cross_analysis_service import generate_cross_analysis
 from services.notification_service import send_analysis_complete_email
 from health import start_health_server, update_stats as _update_stats
 
@@ -221,6 +222,15 @@ def handle_task(db: SupabaseDB, task_id: str, task_type: str, payload: dict) -> 
 
     if task_type == "run_eda":
         run_eda(db, task_id, payload)
+        # After all 3 quality tasks complete, update KB (best-effort)
+        try:
+            p_id = payload.get("project_id", "")
+            ds_id = payload.get("dataset_id", "")
+            if p_id and ds_id:
+                kb = build_quality_kb_summary(db, ds_id)
+                update_project_knowledge_base(db, p_id, kb)
+        except Exception as kb_err:
+            logger.warning("kb_quality_update_failed", error=str(kb_err))
         return
 
     if task_type == "run_consistency_checks":
@@ -241,6 +251,15 @@ def handle_task(db: SupabaseDB, task_id: str, task_type: str, payload: dict) -> 
 
     if task_type == "apply_cleaning_operation":
         apply_cleaning_operation(db, task_id, payload)
+        # Update cleaning KB after each operation
+        try:
+            p_id = payload.get("project_id", "")
+            ds_id = payload.get("dataset_id", "")
+            if p_id and ds_id:
+                kb = build_cleaning_kb_summary(db, ds_id)
+                update_project_knowledge_base(db, p_id, kb)
+        except Exception as kb_err:
+            logger.warning("kb_cleaning_update_failed", error=str(kb_err))
         return
 
     if task_type == "generate_analysis_plan":
@@ -271,10 +290,13 @@ def handle_task(db: SupabaseDB, task_id: str, task_type: str, payload: dict) -> 
                  {"format": payload.get("format"), "task_id": task_id})
         return
 
-    # Future sprint handlers:
-    # generate_report_section (per-section generation, if needed)
-    # generate_chart (standalone chart generation)
-    # export_audit_trail
+    if task_type == "generate_cross_analysis":
+        generate_cross_analysis(db, task_id, payload)
+        return
+
+    if task_type == "export_zip":
+        export_zip(db, task_id, payload)
+        return
 
     logger.warning("unhandled_task_type", task_type=task_type, task_id=task_id)
     db.complete_task(task_id, {"message": f"Task type '{task_type}' not yet implemented"})
@@ -347,3 +369,96 @@ def _handle_interpret_results(db: SupabaseDB, task_id: str, payload: dict) -> No
 
 if __name__ == "__main__":
     main()
+
+
+# ============================================================================
+# KNOWLEDGE BASE UTILITIES
+# ============================================================================
+
+def update_project_knowledge_base(db: SupabaseDB, project_id: str, new_data: dict) -> None:
+    """Merge new_data into projects.additional_context.knowledge_base."""
+    import json as _json
+    project = db.get_project(project_id)
+    if not project:
+        return
+    existing_raw = project.get("additional_context") or "{}"
+    try:
+        existing = _json.loads(existing_raw) if isinstance(existing_raw, str) else (existing_raw or {})
+    except Exception:
+        existing = {}
+    kb = existing.get("knowledge_base") or {}
+    kb.update(new_data)
+    existing["knowledge_base"] = kb
+    db.update("projects", {"additional_context": _json.dumps(existing)}, {"id": project_id})
+
+
+def build_quality_kb_summary(db: SupabaseDB, dataset_id: str) -> dict:
+    """Build a quality summary for the knowledge base."""
+    eda_rows = db.select("eda_results", filters={"dataset_id": dataset_id})
+    profiles = [r for r in eda_rows if r.get("result_type") == "column_profile"]
+    consistency = [r for r in eda_rows if r.get("result_type") == "consistency_check"]
+    bias = [r for r in eda_rows if r.get("result_type") == "bias_check"]
+
+    total_issues = sum(len(r.get("issues") or []) for r in profiles)
+    quality_scores = [r["quality_score"] for r in profiles if r.get("quality_score") is not None]
+    avg_quality = round(sum(quality_scores) / len(quality_scores), 1) if quality_scores else None
+
+    missing_cols = []
+    outlier_cols = []
+    for r in profiles:
+        profile = r.get("profile") or {}
+        if isinstance(profile, str):
+            import json as _j
+            try:
+                profile = _j.loads(profile)
+            except Exception:
+                profile = {}
+        mp = profile.get("missing_pct", 0)
+        oc = profile.get("outlier_count", 0)
+        if mp and mp > 5:
+            missing_cols.append({"column": r.get("column_name"), "missing_pct": mp})
+        if oc and oc > 0:
+            outlier_cols.append({"column": r.get("column_name"), "outlier_count": oc})
+
+    consistency_issues = []
+    for r in consistency:
+        for issue in (r.get("issues") or []):
+            if isinstance(issue, dict):
+                consistency_issues.append({
+                    "type": issue.get("check_type"),
+                    "severity": issue.get("severity"),
+                    "description": issue.get("description"),
+                })
+
+    return {
+        "quality": {
+            "avg_quality_score": avg_quality,
+            "total_column_issues": total_issues,
+            "missing_data_columns": missing_cols[:5],
+            "outlier_columns": outlier_cols[:5],
+            "consistency_issues": consistency_issues[:10],
+            "bias_flags_count": len(bias),
+        }
+    }
+
+
+def build_cleaning_kb_summary(db: SupabaseDB, dataset_id: str) -> dict:
+    """Build a cleaning summary for the knowledge base."""
+    ops = db.select("cleaning_operations", filters={"dataset_id": dataset_id})
+    applied = [o for o in ops if o.get("status") == "applied"]
+    skipped = [o for o in ops if o.get("status") == "rejected"]
+
+    return {
+        "cleaning": {
+            "operations_applied": len(applied),
+            "operations_skipped": len(skipped),
+            "applied_operations": [
+                {
+                    "type": o.get("operation_type"),
+                    "column": o.get("column_name"),
+                    "description": o.get("description"),
+                }
+                for o in applied[:10]
+            ],
+        }
+    }
