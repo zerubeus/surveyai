@@ -3,39 +3,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/browser";
+import { useTaskProgress } from "@/hooks/useTaskProgress";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   FileSpreadsheet,
   FileText,
   Loader2,
   Sparkles,
-  Upload,
   X,
 } from "lucide-react";
 import type { Json } from "@/lib/types/database";
-
-/* ------------------------------------------------------------------ */
-/*  Types                                                              */
-/* ------------------------------------------------------------------ */
-
-interface AIPrefill {
-  name: string;
-  objective_text: string;
-  objective_tags: string[];
-  research_questions: { text: string; priority: number }[];
-  target_population: string;
-  sampling_method: string;
-  country: string;
-  regions: string;
-  audience: string;
-}
 
 /* ------------------------------------------------------------------ */
 /*  Drop zone                                                          */
@@ -48,6 +25,7 @@ function DropZone({
   file,
   onFile,
   icon,
+  disabled,
 }: {
   label: string;
   accept: string;
@@ -55,6 +33,7 @@ function DropZone({
   file: File | null;
   onFile: (f: File | null) => void;
   icon: React.ReactNode;
+  disabled?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -63,23 +42,26 @@ function DropZone({
     (e: React.DragEvent) => {
       e.preventDefault();
       setDragging(false);
+      if (disabled) return;
       const f = e.dataTransfer.files[0];
       if (f) onFile(f);
     },
-    [onFile]
+    [onFile, disabled]
   );
 
   return (
     <div
-      className={`relative rounded-xl border-2 border-dashed p-6 text-center transition-all cursor-pointer ${
+      className={`relative rounded-xl border-2 border-dashed p-6 text-center transition-all ${
+        disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+      } ${
         dragging
           ? "border-blue-400 bg-blue-50 dark:bg-blue-950/20"
           : file
           ? "border-green-400 bg-green-50 dark:bg-green-950/20"
           : "border-muted-foreground/25 bg-muted/20 hover:border-muted-foreground/50 hover:bg-muted/30"
       }`}
-      onClick={() => inputRef.current?.click()}
-      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+      onClick={() => !disabled && inputRef.current?.click()}
+      onDragOver={(e) => { e.preventDefault(); if (!disabled) setDragging(true); }}
       onDragLeave={() => setDragging(false)}
       onDrop={handleDrop}
     >
@@ -87,6 +69,7 @@ function DropZone({
         ref={inputRef}
         type="file"
         accept={accept}
+        disabled={disabled}
         className="hidden"
         onChange={(e) => onFile(e.target.files?.[0] ?? null)}
       />
@@ -104,13 +87,15 @@ function DropZone({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            className="flex-shrink-0 rounded-full p-1 hover:bg-green-100 dark:hover:bg-green-900"
-            onClick={(e) => { e.stopPropagation(); onFile(null); }}
-          >
-            <X className="h-4 w-4 text-green-600" />
-          </button>
+          {!disabled && (
+            <button
+              type="button"
+              className="flex-shrink-0 rounded-full p-1 hover:bg-green-100 dark:hover:bg-green-900"
+              onClick={(e) => { e.stopPropagation(); onFile(null); }}
+            >
+              <X className="h-4 w-4 text-green-600" />
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
@@ -136,14 +121,21 @@ function DropZone({
 /*  Main page                                                          */
 /* ------------------------------------------------------------------ */
 
+type Status = "idle" | "uploading" | "analyzing" | "error";
+
 export default function NewProjectPage() {
   const router = useRouter();
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [instrumentFile, setInstrumentFile] = useState<File | null>(null);
-  const [status, setStatus] = useState<"idle" | "analyzing" | "creating" | "error">("idle");
+  const [status, setStatus] = useState<Status>("idle");
   const [statusMsg, setStatusMsg] = useState("");
   const [orgId, setOrgId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+
+  // Task tracking — once project is created and task dispatched, we poll progress
+  const [analyzeTaskId, setAnalyzeTaskId] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const taskProgress = useTaskProgress(analyzeTaskId);
 
   // Load org on mount
   useEffect(() => {
@@ -151,6 +143,7 @@ export default function NewProjectPage() {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) { router.push("/auth/login"); return; }
       setUserId(user.id);
+
       const { data: membership } = await supabase
         .from("organization_members")
         .select("organization_id")
@@ -160,63 +153,52 @@ export default function NewProjectPage() {
 
       if (membership) {
         setOrgId((membership as { organization_id: string }).organization_id);
-      } else {
-        // Auto-create org
-        const { data: org } = await (supabase as unknown as { rpc: (n: string, p: unknown) => Promise<{ data: unknown }> }).rpc(
-          "create_org_with_owner",
-          {
-            p_name: `${user.email?.split("@")[0] ?? "User"}'s Organization`,
-            p_slug: `org-${user.id.slice(0, 8)}`,
-          }
-        );
-        setOrgId(org as string);
       }
     });
   }, [router]);
 
-  const handleAnalyze = useCallback(async () => {
+  // Watch task progress — redirect to step/1 when AI task completes
+  useEffect(() => {
+    if (!projectId || !analyzeTaskId) return;
+
+    if (taskProgress.status === "completed") {
+      router.push(`/projects/${projectId}/step/1`);
+      router.refresh();
+    } else if (taskProgress.status === "failed") {
+      // Task failed — still navigate, Step 1 will just show empty form
+      router.push(`/projects/${projectId}/step/1`);
+      router.refresh();
+    }
+  }, [taskProgress.status, projectId, analyzeTaskId, router]);
+
+  const handleSubmit = useCallback(async () => {
     if (!csvFile || !orgId || !userId) return;
 
-    setStatus("analyzing");
-    setStatusMsg("Reading your files…");
+    setStatus("uploading");
+    setStatusMsg("Uploading dataset…");
 
     try {
-      // Step 1: Call AI analysis API
-      const formData = new FormData();
-      formData.append("dataset", csvFile);
-      if (instrumentFile) formData.append("instrument", instrumentFile);
-
-      setStatusMsg("AI is reading your data…");
-      const res = await fetch("/api/analyze-uploads", {
-        method: "POST",
-        body: formData,
-      });
-
-      let suggestions: AIPrefill = {
-        name: csvFile.name.replace(/\.[^.]+$/, "").replace(/_/g, " "),
-        objective_text: "",
-        objective_tags: [],
-        research_questions: [{ text: "", priority: 1 }],
-        target_population: "",
-        sampling_method: "cluster",
-        country: "",
-        regions: "",
-        audience: "donor",
-      };
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.suggestions) suggestions = { ...suggestions, ...data.suggestions };
-      }
-      // If AI fails, we still continue with defaults
-
-      // Step 2: Create project with ai_prefill in additional_context
-      // Upload step (step 2) is auto-completed at project creation
-      setStatus("creating");
-      setStatusMsg("Setting up your project…");
-
       const supabase = createBrowserClient();
-      const { data: projectRaw, error } = await (supabase as unknown as {
+
+      // 1. Upload CSV to Supabase Storage
+      const ext = csvFile.name.split(".").pop() ?? "csv";
+      const baseName = csvFile.name.replace(/\.[^/.]+$/, "");
+      const timestamp = Date.now();
+      const storagePath = `${userId}/tmp/${baseName}_${timestamp}.${ext}`;
+      const fileTypeMap: Record<string, string> = { csv: "csv", xls: "xls", xlsx: "xlsx" };
+      const fileType = fileTypeMap[ext.toLowerCase()] ?? "csv";
+
+      const { error: uploadError } = await supabase.storage
+        .from("uploads")
+        .upload(storagePath, csvFile);
+
+      if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
+
+      // 2. Create project (step 2 auto-completed — upload done at creation)
+      setStatusMsg("Creating project…");
+      const projectName = csvFile.name.replace(/\.[^.]+$/, "").replace(/[_-]/g, " ");
+
+      const { data: projectRaw, error: projectError } = await (supabase as unknown as {
         from: (t: string) => {
           insert: (d: unknown) => { select: (s: string) => { single: () => Promise<{ data: unknown; error: unknown }> } }
         }
@@ -225,34 +207,9 @@ export default function NewProjectPage() {
         .insert({
           organization_id: orgId,
           created_by: userId,
-          name: suggestions.name || "New Project",
-          description: JSON.stringify({
-            text: suggestions.objective_text,
-            tags: suggestions.objective_tags ?? [],
-          }),
+          name: projectName,
           status: "draft",
-          research_questions: suggestions.research_questions as unknown as Json,
-          sampling_method: suggestions.sampling_method,
-          target_population: suggestions.target_population,
-          geographic_scope: JSON.stringify({
-            country: suggestions.country,
-            regions: suggestions.regions,
-            urban: false,
-            rural: false,
-          }),
-          additional_context: JSON.stringify({
-            ai_prefill: suggestions,
-            ai_prefill_fields: Object.keys(suggestions as unknown as Record<string, unknown>).filter(
-              (k) => {
-                const v = (suggestions as unknown as Record<string, unknown>)[k];
-                return v !== "" && !(Array.isArray(v) && v.length === 0);
-              }
-            ),
-            // Persist audience for Step1Form auto-save read
-            audience: suggestions.audience || null,
-          }),
           current_step: 1,
-          // Step 2 (Upload) is done at project creation — mark completed immediately
           pipeline_status: {
             "1": "active",
             "2": "completed",
@@ -267,55 +224,76 @@ export default function NewProjectPage() {
         .select("id")
         .single();
 
-      if (error || !projectRaw) {
-        throw new Error((error as { message: string })?.message ?? "Failed to create project");
+      if (projectError || !projectRaw) {
+        throw new Error((projectError as { message: string })?.message ?? "Failed to create project");
       }
 
-      const project = projectRaw as { id: string };
+      const pid = (projectRaw as { id: string }).id;
+      setProjectId(pid);
 
-      // Step 3: Upload dataset file to Supabase Storage + create dataset record
-      setStatusMsg("Uploading dataset…");
-      try {
-        const ext = csvFile.name.split(".").pop() ?? "csv";
-        const baseName = csvFile.name.replace(/\.[^/.]+$/, "");
-        const storagePath = `${userId}/${project.id}/${baseName}_${Date.now()}.${ext}`;
-        const fileTypeMap: Record<string, string> = {
-          csv: "csv", xls: "xls", xlsx: "xlsx",
-        };
-        const fileType = fileTypeMap[ext.toLowerCase()] ?? "csv";
+      // 3. Move storage file to project folder + create dataset record
+      const finalStoragePath = `${userId}/${pid}/${baseName}_${timestamp}.${ext}`;
+      await supabase.storage.from("uploads").move(storagePath, finalStoragePath);
 
-        const { error: uploadError } = await supabase.storage
-          .from("uploads")
-          .upload(storagePath, csvFile);
+      const { data: dsRaw } = await (supabase as unknown as {
+        from: (t: string) => { insert: (d: unknown) => { select: (s: string) => { single: () => Promise<{ data: unknown }> } } }
+      })
+        .from("datasets")
+        .insert({
+          project_id: pid,
+          uploaded_by: userId,
+          name: csvFile.name,
+          original_file_path: finalStoragePath,
+          file_type: fileType,
+          file_size_bytes: csvFile.size,
+          status: "uploaded",
+        })
+        .select("id")
+        .single();
 
-        if (!uploadError) {
-          await (supabase as unknown as {
-            from: (t: string) => { insert: (d: unknown) => Promise<unknown> }
-          })
-            .from("datasets")
-            .insert({
-              project_id: project.id,
-              uploaded_by: userId,
-              name: csvFile.name,
-              original_file_path: storagePath,
-              file_type: fileType,
-              file_size_bytes: csvFile.size,
-              status: "uploaded",
-            });
+      const datasetId = (dsRaw as { id: string } | null)?.id ?? null;
+
+      // 4. Dispatch analyze_uploads worker task
+      setStatus("analyzing");
+      setStatusMsg("AI is reading your data…");
+
+      const { data: taskRaw } = await (supabase as unknown as {
+        from: (t: string) => {
+          insert: (d: unknown) => { select: (s: string) => { single: () => Promise<{ data: unknown }> } }
         }
-      } catch {
-        // Non-fatal — user can re-upload in step 2 if needed
+      })
+        .from("tasks")
+        .insert({
+          project_id: pid,
+          task_type: "analyze_uploads",
+          payload: {
+            project_id: pid,
+            dataset_id: datasetId,
+          },
+          created_by: userId,
+        } as unknown as Json)
+        .select("id")
+        .single();
+
+      const taskId = (taskRaw as { id: string } | null)?.id ?? null;
+      if (taskId) {
+        setAnalyzeTaskId(taskId);
+        // useEffect above will redirect when task completes
+      } else {
+        // Couldn't dispatch task — go to step 1 immediately (empty form)
+        router.push(`/projects/${pid}/step/1`);
       }
 
-      router.push(`/projects/${project.id}/step/1`);
-      router.refresh();
     } catch (err) {
       setStatus("error");
       setStatusMsg(String(err));
     }
   }, [csvFile, instrumentFile, orgId, userId, router]);
 
-  const isLoading = status === "analyzing" || status === "creating";
+  const isLoading = status === "uploading" || status === "analyzing";
+  const progressMsg = isLoading
+    ? (taskProgress.progressMessage ?? statusMsg)
+    : "";
 
   return (
     <div className="container max-w-2xl py-12">
@@ -341,6 +319,7 @@ export default function NewProjectPage() {
           file={csvFile}
           onFile={setCsvFile}
           icon={<FileSpreadsheet className="h-6 w-6" />}
+          disabled={isLoading}
         />
 
         {/* Instrument upload */}
@@ -351,9 +330,9 @@ export default function NewProjectPage() {
           file={instrumentFile}
           onFile={setInstrumentFile}
           icon={<FileText className="h-6 w-6" />}
+          disabled={isLoading}
         />
 
-        {/* Accepted formats note */}
         <p className="text-center text-xs text-muted-foreground">
           Dataset: CSV, XLS, XLSX · Questionnaire: PDF, DOCX, XLS · Max 50 MB each
         </p>
@@ -365,15 +344,15 @@ export default function NewProjectPage() {
           </div>
         )}
 
-        {/* Loading state */}
+        {/* Loading / progress */}
         {isLoading && (
           <div className="flex items-center gap-3 rounded-lg border bg-muted/50 px-4 py-3 text-sm">
             <Loader2 className="h-4 w-4 animate-spin text-primary flex-shrink-0" />
-            <span>{statusMsg}</span>
+            <span>{progressMsg}</span>
           </div>
         )}
 
-        {/* Action buttons */}
+        {/* Actions */}
         <div className="flex gap-3 pt-2">
           <Button
             variant="outline"
@@ -386,7 +365,7 @@ export default function NewProjectPage() {
           <Button
             className="flex-1"
             disabled={!csvFile || isLoading || !orgId}
-            onClick={handleAnalyze}
+            onClick={handleSubmit}
           >
             {isLoading ? (
               <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{statusMsg}</>

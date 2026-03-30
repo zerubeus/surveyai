@@ -29,6 +29,7 @@ from services.analysis_executor import run_analysis
 from services.report_service import generate_report
 from services.export_service import export_report, export_zip
 from services.cross_analysis_service import generate_cross_analysis
+from services.analyze_uploads_service import analyze_uploads
 from services.notification_service import send_analysis_complete_email
 from health import start_health_server, update_stats as _update_stats
 
@@ -292,6 +293,10 @@ def handle_task(db: SupabaseDB, task_id: str, task_type: str, payload: dict) -> 
 
     if task_type == "generate_cross_analysis":
         generate_cross_analysis(db, task_id, payload)
+        return
+
+    if task_type == "analyze_uploads":
+        analyze_uploads(db, task_id, payload)
         return
 
     if task_type == "export_zip":
