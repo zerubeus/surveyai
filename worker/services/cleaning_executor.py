@@ -320,6 +320,22 @@ def _apply_transform(
                     # Fallback: use provided value directly
                     df.loc[mask, col_name] = value
 
+    elif op_type == "custom":
+        # AI-generated pandas code for custom fixes
+        generated_code = params.get("generated_code")
+        is_column_op = params.get("is_column_op", True)
+
+        if not generated_code:
+            # No code generated yet — this is a legacy text-only custom op, skip
+            logger.warning("custom_op_no_code", operation_id=params.get("id"))
+            return df
+
+        # Run the sandbox executor
+        from services.code_fix_service import run_sandboxed
+
+        result_df, _, _ = run_sandboxed(generated_code, df, col_name)
+        return result_df
+
     elif op_type in ("fix_encoding", "fix_skip_logic"):
         pass  # future implementation
 

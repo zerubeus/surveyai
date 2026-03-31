@@ -639,6 +639,8 @@ export function Step4Quality({
   );
   const [applyingIssueId, setApplyingIssueId] = useState<string | null>(null);
   const [fixApplyTaskId, setFixApplyTaskId] = useState<string | null>(null);
+  // Track whether we're in code generation phase (vs apply phase)
+  const [isGeneratingCode, setIsGeneratingCode] = useState(false);
   // Custom action text per issue
   const [customTexts, setCustomTexts] = useState<Record<string, string>>({});
   const [showCustomInput, setShowCustomInput] = useState<Record<string, boolean>>({});
@@ -685,14 +687,48 @@ export function Step4Quality({
       fixApplyProgress.status === "failed"
     ) {
       if (fixApplyProgress.status === "completed") {
+        // Check if this was code generation phase — chain to apply
+        if (isGeneratingCode) {
+          const result = fixApplyProgress.result as { operation_id?: string; dataset_id?: string; safe?: boolean; error?: string } | null;
+          if (result?.safe && result?.operation_id && datasetId) {
+            // Code was generated successfully — now apply it
+            setIsGeneratingCode(false);
+            supabase.auth.getUser().then(async ({ data: { user } }) => {
+              if (!user?.id) return;
+              try {
+                const { taskId } = await dispatchTask(
+                  project.id,
+                  "apply_cleaning_operation",
+                  { operation_id: result.operation_id, dataset_id: datasetId, approved_by: user.id },
+                  datasetId,
+                );
+                setFixApplyTaskId(taskId);
+              } catch {
+                toast("Failed to apply generated fix", { variant: "error" });
+                setApplyingIssueId(null);
+                setFixApplyTaskId(null);
+              }
+            });
+            return; // Don't reset state yet — wait for apply task
+          } else {
+            // Code generation failed or was unsafe
+            toast(result?.error || "AI could not generate safe code for this fix", { variant: "error" });
+            setIsGeneratingCode(false);
+            setApplyingIssueId(null);
+            setFixApplyTaskId(null);
+            return;
+          }
+        }
+        // This was apply phase — success
         toast("Fix applied successfully", { variant: "success" });
       } else {
         toast("Failed to apply fix", { variant: "error" });
       }
+      setIsGeneratingCode(false);
       setApplyingIssueId(null);
       setFixApplyTaskId(null);
     }
-  }, [fixApplyProgress.status]);
+  }, [fixApplyProgress.status, fixApplyProgress.result, isGeneratingCode, datasetId, dispatchTask, project.id, supabase]);
 
   /* ---------- Changes sheet state ---------- */
   const [isChangesSheetOpen, setIsChangesSheetOpen] = useState(false);
@@ -804,33 +840,40 @@ export function Step4Quality({
         if (!userId) throw new Error("Not authenticated");
 
         if (customText) {
-          // Insert custom cleaning operation
-          // Use recode_values with title_case as a safe no-op transform for custom actions
+          // Insert custom cleaning operation with AI code generation
           const { data: opData, error: opErr } = await supabase
             .from("cleaning_operations")
             // @ts-ignore
             .insert({
               dataset_id: datasetId,
-              operation_type: "recode_values",
+              operation_type: "custom",
               column_name: issue.columnName ?? null,
               description: customText,
-              reasoning: `User-defined action for: ${issue.title}`,
+              reasoning: `AI-generated fix for: ${issue.title}`,
               severity: issue.severity,
               confidence: 1.0,
               status: "approved",
               approved_by: userId,
               priority: 99,
-              parameters: { method: "title_case" },
+              parameters: { instruction: customText },
             })
             .select("id")
             .single();
           if (opErr || !opData) throw new Error(opErr?.message ?? "Failed to save custom action");
+          // Dispatch code generation task (will chain to apply after completion)
           const { taskId } = await dispatchTask(
             project.id,
-            "apply_cleaning_operation",
-            { operation_id: (opData as { id: string }).id, dataset_id: datasetId, approved_by: userId },
+            "generate_code_fix",
+            {
+              operation_id: (opData as { id: string }).id,
+              dataset_id: datasetId,
+              instruction: customText,
+              column_name: issue.columnName ?? null,
+              project_id: project.id,
+            },
             datasetId,
           );
+          setIsGeneratingCode(true);
           setFixApplyTaskId(taskId);
         } else if (issue.matchingOpId) {
           await supabase
@@ -1391,7 +1434,9 @@ export function Step4Quality({
                                     <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                                   ) : null}
                                   {applyingIssueId === issue.id
-                                    ? "Applying…"
+                                    ? isGeneratingCode
+                                      ? "AI writing code…"
+                                      : "Applying…"
                                     : cleaningSuggestionsLoading && !issue.matchingOpId
                                       ? "Generating fix…"
                                       : customTexts[issue.id]?.trim()

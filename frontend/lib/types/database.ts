@@ -1230,7 +1230,9 @@ export type Database = {
         | "export_report"
         | "export_audit_trail"
         | "generate_cross_analysis"
-        | "export_zip";
+        | "analyze_uploads"
+        | "export_zip"
+        | "generate_code_fix";
       cleaning_op_status:
         | "pending"
         | "approved"

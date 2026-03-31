@@ -25,6 +25,7 @@ from services.bias_service import run_bias_detection
 from services.eda_interpreter import interpret_quality_results
 from services.cleaning_service import generate_cleaning_suggestions
 from services.cleaning_executor import apply_cleaning_operation
+from services.code_fix_service import generate_code_fix
 from services.analysis_planner import generate_analysis_plan
 from services.analysis_executor import run_analysis
 from services.report_service import generate_report
@@ -303,6 +304,10 @@ def handle_task(db: SupabaseDB, task_id: str, task_type: str, payload: dict) -> 
 
     if task_type == "export_zip":
         export_zip(db, task_id, payload)
+        return
+
+    if task_type == "generate_code_fix":
+        generate_code_fix(db, task_id, payload)
         return
 
     logger.warning("unhandled_task_type", task_type=task_type, task_id=task_id)
