@@ -39,6 +39,7 @@ import {
   ChevronDown,
   Eye,
   Loader2,
+  Sparkles,
   Undo2,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
@@ -465,6 +466,27 @@ export function Step4Quality({
   const [cleaningSuggestionsTaskId, setCleaningSuggestionsTaskId] = useState<string | null>(null);
   const cleaningSuggestionsProgress = useTaskProgress(cleaningSuggestionsTaskId);
 
+  // Manual dispatch function for "Generate AI fix suggestions" button
+  const handleGenerateCleaningSuggestions = useCallback(async () => {
+    if (!datasetId || !project.id) return;
+    if (cleaningSuggestionsProgress.status === "running" ||
+        cleaningSuggestionsProgress.status === "pending" ||
+        cleaningSuggestionsProgress.status === "claimed") return;
+    try {
+      cleaningDispatched.current = true;
+      const { taskId } = await dispatchTask(
+        project.id,
+        "generate_cleaning_suggestions",
+        { dataset_id: datasetId, project_id: project.id },
+        datasetId,
+      );
+      setCleaningSuggestionsTaskId(taskId);
+    } catch (err) {
+      console.error("Failed to dispatch generate_cleaning_suggestions:", err);
+      cleaningDispatched.current = false;
+    }
+  }, [datasetId, project.id, dispatchTask, cleaningSuggestionsProgress.status]);
+
   useEffect(() => {
     if (
       edaProgress.status === "completed" &&
@@ -483,27 +505,50 @@ export function Step4Quality({
           .then(({ taskId }) => setInterpretTaskId(taskId))
           .catch((err) => console.error("Failed to dispatch interpret_results:", err));
       }
-      if (!cleaningDispatched.current && cleaning.all.length === 0 && !cleaningSuggestionsTaskId) {
-        cleaningDispatched.current = true;
-        dispatchTask(
-          project.id,
-          "generate_cleaning_suggestions",
-          { dataset_id: datasetId },
-          datasetId,
-        )
-          .then(({ taskId }) => setCleaningSuggestionsTaskId(taskId))
-          .catch((err) => console.error("Failed to dispatch generate_cleaning_suggestions:", err));
-      }
     }
   }, [
     edaProgress.status,
     consistencyProgress.status,
     biasProgress.status,
     interpretTaskId,
-    cleaningSuggestionsTaskId,
-    cleaning.all.length,
     datasetId,
     project.id,
+    dispatchTask,
+  ]);
+
+  // Separate useEffect for cleaning suggestions with smarter re-dispatch logic
+  useEffect(() => {
+    if (cleaningDispatched.current) return;
+    if (!datasetId || !project.id) return;
+
+    // Don't dispatch if already running or pending
+    const notRunning = cleaningSuggestionsProgress.status !== "running" &&
+                       cleaningSuggestionsProgress.status !== "pending" &&
+                       cleaningSuggestionsProgress.status !== "claimed";
+    if (!notRunning) return;
+
+    // Only auto-dispatch if there are no suggestions AND no task in progress
+    const noSuggestions = cleaning.all.length === 0;
+    if (noSuggestions && !cleaningSuggestionsTaskId) {
+      cleaningDispatched.current = true;
+      dispatchTask(
+        project.id,
+        "generate_cleaning_suggestions",
+        { dataset_id: datasetId, project_id: project.id },
+        datasetId,
+      )
+        .then(({ taskId }) => setCleaningSuggestionsTaskId(taskId))
+        .catch((err) => {
+          console.error("Failed to dispatch generate_cleaning_suggestions:", err);
+          cleaningDispatched.current = false;
+        });
+    }
+  }, [
+    datasetId,
+    project.id,
+    cleaning.all.length,
+    cleaningSuggestionsProgress.status,
+    cleaningSuggestionsTaskId,
     dispatchTask,
   ]);
 
@@ -1096,8 +1141,27 @@ export function Step4Quality({
               )
             );
 
+            // Show "Generate AI fix suggestions" button when no suggestions and not loading
+            const canGenerateSuggestions = cleaning.all.length === 0 && !cleaningSuggestionsLoading;
+
             return (
               <div className="flex items-center gap-2">
+                {canGenerateSuggestions && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleGenerateCleaningSuggestions}
+                  >
+                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                    Generate AI fix suggestions
+                  </Button>
+                )}
+                {cleaningSuggestionsLoading && (
+                  <Button variant="outline" size="sm" disabled>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Generating suggestions...
+                  </Button>
+                )}
                 {unresolvedFixable.length > 0 && (
                   <Button
                     variant="outline"
@@ -1276,6 +1340,22 @@ export function Step4Quality({
                               </div>
                             )}
 
+                            {/* Show "Generate AI fix suggestions" when no fix available and not loading */}
+                            {!issue.matchingOpId && !cleaningSuggestionsLoading && cleaning.all.length === 0 && (
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Sparkles className="h-4 w-4" />
+                                <span>No AI fix available yet.</span>
+                                <Button
+                                  size="sm"
+                                  variant="link"
+                                  className="h-auto p-0 text-primary"
+                                  onClick={handleGenerateCleaningSuggestions}
+                                >
+                                  Generate AI fix suggestions
+                                </Button>
+                              </div>
+                            )}
+
                             {/* Custom action input */}
                             {showCustomInput[issue.id] && (
                               <div className="space-y-2 rounded border p-3 bg-muted/30">
@@ -1294,28 +1374,31 @@ export function Step4Quality({
 
                             {/* Action buttons */}
                             <div className="flex flex-wrap gap-2">
-                              <Button
-                                size="sm"
-                                onClick={() => handleApplyFix(issue)}
-                                disabled={
-                                  isApplyingAll ||
-                                  applyingIssueId === issue.id ||
-                                  (!cleaningSuggestionsLoading && !issue.matchingOpId && !customTexts[issue.id]?.trim())
-                                }
-                              >
-                                {applyingIssueId === issue.id ? (
-                                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                                ) : cleaningSuggestionsLoading && !issue.matchingOpId ? (
-                                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                                ) : null}
-                                {applyingIssueId === issue.id
-                                  ? "Applying…"
-                                  : cleaningSuggestionsLoading && !issue.matchingOpId
-                                    ? "Generating fix…"
-                                    : customTexts[issue.id]?.trim()
-                                      ? "Apply Custom"
-                                      : "Apply this fix"}
-                              </Button>
+                              {/* Show Apply button only if we have a fix or custom text */}
+                              {(issue.matchingOpId || customTexts[issue.id]?.trim() || cleaningSuggestionsLoading) && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleApplyFix(issue)}
+                                  disabled={
+                                    isApplyingAll ||
+                                    applyingIssueId === issue.id ||
+                                    (!cleaningSuggestionsLoading && !issue.matchingOpId && !customTexts[issue.id]?.trim())
+                                  }
+                                >
+                                  {applyingIssueId === issue.id ? (
+                                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                  ) : cleaningSuggestionsLoading && !issue.matchingOpId ? (
+                                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                  ) : null}
+                                  {applyingIssueId === issue.id
+                                    ? "Applying…"
+                                    : cleaningSuggestionsLoading && !issue.matchingOpId
+                                      ? "Generating fix…"
+                                      : customTexts[issue.id]?.trim()
+                                        ? "Apply Custom"
+                                        : "Apply this fix"}
+                                </Button>
+                              )}
 
                               <Button
                                 size="sm"
