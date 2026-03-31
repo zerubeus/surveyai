@@ -7,8 +7,6 @@ import { useQualityResults } from "@/hooks/useQualityResults";
 import { useCleaningSuggestions } from "@/hooks/useCleaningSuggestions";
 import { useDispatchTask } from "@/hooks/useDispatchTask";
 import { useTaskProgress } from "@/hooks/useTaskProgress";
-import { useProgressToast } from "@/hooks/useProgressToast";
-import { LoadingSkeleton } from "@/components/workflow/LoadingSkeleton";
 import { ChangesSheet } from "@/components/workflow/ChangesSheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -421,10 +419,6 @@ export function Step4Quality({
   const biasProgress = useTaskProgress(biasTaskId);
   const interpretProgress = useTaskProgress(interpretTaskId);
 
-  useProgressToast(edaProgress, { label: "Column profiling", thresholds: [50] });
-  useProgressToast(consistencyProgress, { label: "Consistency checks" });
-  useProgressToast(biasProgress, { label: "Bias detection" });
-  useProgressToast(interpretProgress, { label: "AI interpretation" });
 
   const { dispatchTask, isDispatching } = useDispatchTask();
 
@@ -584,6 +578,44 @@ export function Step4Quality({
       cleaningSuggestionsProgress.status === "pending" ||
       cleaningSuggestionsProgress.status === "claimed") &&
     cleaning.all.length === 0;
+
+  /* ---------- Unified loading screen state ---------- */
+  // Ready to render main content only when EDA done AND cleaning suggestions done (or not needed)
+  const readyToRender = columnProfiles.length > 0 && (
+    cleaning.all.length > 0 ||
+    cleaningSuggestionsProgress.status === "completed" ||
+    !cleaningSuggestionsTaskId  // never dispatched = no suggestions needed yet
+  );
+
+  // Compute overall progress (0-100) for unified loading bar
+  const overallProgress = useMemo(() => {
+    const edaPct = edaProgress.progress ?? 0;
+    const consistencyPct = consistencyProgress.progress ?? 0;
+    const biasPct = biasProgress.progress ?? 0;
+    const cleaningPct = cleaningSuggestionsProgress.progress ?? 0;
+    // Weight: EDA=40%, consistency=20%, bias=20%, cleaning=20%
+    return Math.round(edaPct * 0.4 + consistencyPct * 0.2 + biasPct * 0.2 + cleaningPct * 0.2);
+  }, [edaProgress.progress, consistencyProgress.progress, biasProgress.progress, cleaningSuggestionsProgress.progress]);
+
+  // Dynamic status message for unified loading screen
+  const loadingMessage = useMemo(() => {
+    if (edaProgress.status === "running" || edaProgress.status === "pending" || edaProgress.status === "claimed") {
+      return edaProgress.progressMessage ?? "Profiling your dataset columns…";
+    }
+    if (consistencyProgress.status === "running" || consistencyProgress.status === "pending" || consistencyProgress.status === "claimed") {
+      return consistencyProgress.progressMessage ?? "Checking for consistency issues…";
+    }
+    if (biasProgress.status === "running" || biasProgress.status === "pending" || biasProgress.status === "claimed") {
+      return biasProgress.progressMessage ?? "Detecting bias patterns…";
+    }
+    if (cleaningSuggestionsProgress.status === "running" || cleaningSuggestionsProgress.status === "pending" || cleaningSuggestionsProgress.status === "claimed") {
+      return cleaningSuggestionsProgress.progressMessage ?? "Generating AI fix suggestions…";
+    }
+    if (interpretProgress.status === "running" || interpretProgress.status === "claimed") {
+      return interpretProgress.progressMessage ?? "Generating expert interpretation…";
+    }
+    return "Finalizing analysis…";
+  }, [edaProgress, consistencyProgress, biasProgress, cleaningSuggestionsProgress, interpretProgress]);
 
   /* ---------- Dismissed + applying state ---------- */
   // Parse quality_dismissed_ids from project.additional_context on mount
@@ -992,58 +1024,30 @@ export function Step4Quality({
   }
 
   /* ================================================================ */
-  /*  Loading skeleton                                                 */
+  /*  Unified loading screen                                           */
   /* ================================================================ */
 
-  if (isRunning && !hasResults) {
-    return (
-      <div className="space-y-6">
-        <Card>
-          <CardContent className="space-y-4 p-6">
-            <div className="flex items-center gap-3">
-              <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-              <div>
-                <p className="font-medium">
-                  Profiling your{" "}
-                  {Object.keys(mappingsByColumn).length || "\u2026"} columns...
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  This usually takes about 60 seconds.
-                </p>
-              </div>
+  if (!readyToRender) {
+    // Show unified loading if any task is running or we have no results yet
+    const anyTaskRunning = isRunning || cleaningSuggestionsLoading;
+
+    if (anyTaskRunning || resultsLoading) {
+      return (
+        <div className="space-y-4 max-w-lg mx-auto mt-16">
+          <div className="text-center space-y-2">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30">
+              <BarChart3 className="h-7 w-7 text-blue-600 animate-pulse" />
             </div>
-            <div className="space-y-3">
-              <TaskProgressRow
-                label="Column profiling"
-                progress={edaProgress.progress}
-                message={edaProgress.progressMessage}
-                status={edaProgress.status}
-              />
-              <TaskProgressRow
-                label="Consistency checks"
-                progress={consistencyProgress.progress}
-                message={consistencyProgress.progressMessage}
-                status={consistencyProgress.status}
-              />
-              <TaskProgressRow
-                label="Bias detection"
-                progress={biasProgress.progress}
-                message={biasProgress.progressMessage}
-                status={biasProgress.status}
-              />
-            </div>
-          </CardContent>
-        </Card>
-        <LoadingSkeleton type="dashboard" count={4} />
-      </div>
-    );
-  }
+            <h3 className="text-lg font-semibold">Analyzing your dataset</h3>
+            <p className="text-sm text-muted-foreground">{loadingMessage}</p>
+          </div>
+          <Progress value={overallProgress} className="h-2" />
+          <p className="text-center text-xs text-muted-foreground">{overallProgress}% complete</p>
+        </div>
+      );
+    }
 
-  /* ================================================================ */
-  /*  No results yet                                                   */
-  /* ================================================================ */
-
-  if (!hasResults && !resultsLoading) {
+    // No tasks running and no results — show empty state
     return (
       <Card className="border-dashed mt-4">
         <CardContent className="flex flex-col items-center justify-center py-12">
@@ -1063,40 +1067,6 @@ export function Step4Quality({
 
   return (
     <div className="space-y-6">
-      {/* Progress bars (tasks still running but we have partial results) */}
-      {(isRunning || isInterpreting) && (
-        <Card>
-          <CardContent className="space-y-3 p-4">
-            <TaskProgressRow
-              label="Column profiling"
-              progress={edaProgress.progress}
-              message={edaProgress.progressMessage}
-              status={edaProgress.status}
-            />
-            <TaskProgressRow
-              label="Consistency checks"
-              progress={consistencyProgress.progress}
-              message={consistencyProgress.progressMessage}
-              status={consistencyProgress.status}
-            />
-            <TaskProgressRow
-              label="Bias detection"
-              progress={biasProgress.progress}
-              message={biasProgress.progressMessage}
-              status={biasProgress.status}
-            />
-            {interpretTaskId && (
-              <TaskProgressRow
-                label="AI interpretation"
-                progress={interpretProgress.progress}
-                message={interpretProgress.progressMessage}
-                status={interpretProgress.status}
-              />
-            )}
-          </CardContent>
-        </Card>
-      )}
-
       {/* Error display */}
       {(edaProgress.error || consistencyProgress.error || biasProgress.error) && (
         <Card className="border-red-200 dark:border-red-900">
@@ -1668,35 +1638,3 @@ function SeverityCountBadge({
   );
 }
 
-function TaskProgressRow({
-  label,
-  progress,
-  message,
-  status,
-}: {
-  label: string;
-  progress: number;
-  message: string | null;
-  status: string | null;
-}) {
-  const isDone = status === "completed";
-  const isFailed = status === "failed";
-
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between text-xs">
-        <span className="font-medium">
-          {label}
-          {isDone && (
-            <CheckCircle2 className="ml-1.5 inline h-3.5 w-3.5 text-green-500" />
-          )}
-          {isFailed && (
-            <AlertCircle className="ml-1.5 inline h-3.5 w-3.5 text-red-500" />
-          )}
-        </span>
-        <span className="text-muted-foreground">{message ?? ""}</span>
-      </div>
-      <Progress value={progress} className="h-2" />
-    </div>
-  );
-}
