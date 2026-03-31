@@ -166,18 +166,28 @@ export function ChangesSheet({
 
         const text = await response.text();
 
-        // Parse CSV (simple split - handles most cases)
-        const lines = text.split("\n").filter((line) => line.trim());
+        // Parse CSV — auto-detect delimiter from first line
+        const lines = text.split(/\r?\n/).filter((line) => line.trim());
         if (lines.length === 0) {
           throw new Error("Empty file");
         }
 
+        // Sniff delimiter: count occurrences of common delimiters in first line
+        const firstLine = lines[0];
+        const counts = {
+          ",": (firstLine.match(/,/g) || []).length,
+          ";": (firstLine.match(/;/g) || []).length,
+          "\t": (firstLine.match(/\t/g) || []).length,
+          "|": (firstLine.match(/\|/g) || []).length,
+        };
+        const delimiter = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+
         // Parse header
-        const headers = parseCSVLine(lines[0]);
+        const headers = parseCSVLine(lines[0], delimiter);
         setCsvHeaders(headers);
 
         // Parse data rows
-        const rows = lines.slice(1).map((line) => parseCSVLine(line));
+        const rows = lines.slice(1).map((line) => parseCSVLine(line, delimiter));
         setCsvData(rows);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load data");
@@ -546,7 +556,7 @@ export function ChangesSheet({
 /**
  * Simple CSV line parser that handles quoted fields
  */
-function parseCSVLine(line: string): string[] {
+function parseCSVLine(line: string, delimiter = ","): string[] {
   const result: string[] = [];
   let current = "";
   let inQuotes = false;
@@ -561,7 +571,7 @@ function parseCSVLine(line: string): string[] {
       } else {
         inQuotes = !inQuotes;
       }
-    } else if (char === "," && !inQuotes) {
+    } else if (char === delimiter && !inQuotes) {
       result.push(current.trim());
       current = "";
     } else {

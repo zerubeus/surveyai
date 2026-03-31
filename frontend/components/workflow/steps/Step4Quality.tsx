@@ -555,16 +555,8 @@ export function Step4Quality({
     dispatchTask,
   ]);
 
-  // If suggestions task completed with 0 results, allow retry (EDA might have been re-run)
-  useEffect(() => {
-    if (
-      cleaningSuggestionsProgress.status === "completed" &&
-      cleaning.all.length === 0
-    ) {
-      // Task said "done" but found nothing — might be stale, allow one retry
-      cleaningDispatched.current = false;
-    }
-  }, [cleaningSuggestionsProgress.status, cleaning.all.length]);
+  // NOTE: Do NOT reset cleaningDispatched on zero results — this causes infinite re-dispatch loops.
+  // If suggestions are missing, use the manual "Generate AI fix suggestions" button instead.
 
   /* ---------- Derived state ---------- */
   const isRunning =
