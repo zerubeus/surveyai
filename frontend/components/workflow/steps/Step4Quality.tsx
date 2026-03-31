@@ -335,7 +335,9 @@ function buildAuditSections(
     const outlierCount = (p?.outlier_count as number) ?? 0;
     if (outlierCount <= 0) continue;
     const colName = cp.column_name ?? "unknown";
-    const totalRows = rowCount || 1;
+    // Use per-column total_count from EDA profile (always accurate), fallback to rowCount
+    const colTotalCount = (p?.total_count as number) ?? rowCount;
+    const totalRows = colTotalCount > 0 ? colTotalCount : 1;
     const pct = ((outlierCount / totalRows) * 100).toFixed(1);
     outlierIssues.push({
       id: `s6-outlier-${cp.id}`,
@@ -552,6 +554,17 @@ export function Step4Quality({
     dispatchTask,
   ]);
 
+  // If suggestions task completed with 0 results, allow retry (EDA might have been re-run)
+  useEffect(() => {
+    if (
+      cleaningSuggestionsProgress.status === "completed" &&
+      cleaning.all.length === 0
+    ) {
+      // Task said "done" but found nothing — might be stale, allow one retry
+      cleaningDispatched.current = false;
+    }
+  }, [cleaningSuggestionsProgress.status, cleaning.all.length]);
+
   /* ---------- Derived state ---------- */
   const isRunning =
     edaProgress.status === "running" ||
@@ -660,7 +673,16 @@ export function Step4Quality({
   const [isChangesSheetOpen, setIsChangesSheetOpen] = useState(false);
 
   /* ---------- Build 7 audit sections ---------- */
-  const rowCount = dataset?.row_count ?? 0;
+  // Derive rowCount from EDA summary profile (always accurate from actual file read)
+  // Fall back to dataset record if EDA not available yet
+  const rowCount = useMemo(() => {
+    const summaryProfile = datasetSummary?.profile as Record<string, unknown> | null;
+    const edaRowCount =
+      (summaryProfile?.row_count as number) ??
+      (summaryProfile?.total_count as number) ??
+      null;
+    return edaRowCount ?? dataset?.row_count ?? 0;
+  }, [datasetSummary, dataset?.row_count]);
   const colCount = dataset?.column_count ?? columnProfiles.length;
 
   const auditSections = useMemo(
@@ -1340,6 +1362,14 @@ export function Step4Quality({
                               </div>
                             )}
 
+                            {/* Loading state when generating suggestions */}
+                            {!issue.matchingOpId && cleaningSuggestionsLoading && (
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span>Generating suggested fix...</span>
+                              </div>
+                            )}
+
                             {/* Show "Generate AI fix suggestions" when no fix available and not loading */}
                             {!issue.matchingOpId && !cleaningSuggestionsLoading && cleaning.all.length === 0 && (
                               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1353,6 +1383,13 @@ export function Step4Quality({
                                 >
                                   Generate AI fix suggestions
                                 </Button>
+                              </div>
+                            )}
+
+                            {/* No matching op but suggestions exist (just no match for this specific issue) */}
+                            {!issue.matchingOpId && !cleaningSuggestionsLoading && cleaning.all.length > 0 && !showCustomInput[issue.id] && (
+                              <div className="text-sm text-muted-foreground">
+                                No automated fix available for this issue.
                               </div>
                             )}
 

@@ -139,6 +139,10 @@ def generate_cleaning_suggestions(
                 scale_sugs = _check_likert_scale(series, col_name, mapping)
                 suggestions.extend(scale_sugs)
 
+            # Check 7: Genuine missing values (NaN) requiring imputation
+            impute_sugs = _check_imputation_needed(series, col_name, data_type, role)
+            suggestions.extend(impute_sugs)
+
         except Exception as col_err:
             logger.warning("column_check_failed", column=col_name, error=str(col_err))
             continue
@@ -590,6 +594,100 @@ def _check_likert_scale(
                 },
             }
         )
+
+    return suggestions
+
+
+def _check_imputation_needed(
+    series: pd.Series,
+    col_name: str,
+    data_type: str,
+    role: str,
+) -> list[dict[str, Any]]:
+    """Check for genuinely missing values (NaN) requiring imputation."""
+    suggestions: list[dict[str, Any]] = []
+    MISSING_PCT_THRESHOLD = 5.0  # flag if >5% missing
+
+    missing_count = int(series.isna().sum())
+    total_count = len(series)
+    if total_count == 0:
+        return suggestions
+
+    missing_pct = (missing_count / total_count) * 100
+    if missing_pct < MISSING_PCT_THRESHOLD:
+        return suggestions
+
+    # Choose imputation method based on column type and distribution
+    is_numeric = data_type in ("continuous", "ordinal", "numeric", "float64", "int64") or pd.api.types.is_numeric_dtype(series)
+
+    if is_numeric:
+        non_null = pd.to_numeric(series, errors="coerce").dropna()
+        if len(non_null) == 0:
+            return suggestions
+
+        # Check skewness to decide mean vs median
+        method = "median"
+        if len(non_null) > 10:
+            try:
+                skew = float(non_null.skew())
+                method = "median" if abs(skew) > 1 else "mean"
+            except Exception:
+                method = "median"
+
+        impute_val = float(non_null.median() if method == "median" else non_null.mean())
+        sample_before = series[series.isna()].head(3).index.tolist()
+
+        suggestions.append({
+            "operation_type": "impute_value",
+            "column_name": col_name,
+            "description": (
+                f"Impute {missing_pct:.1f}% missing values in '{col_name}' "
+                f"using {method} ({impute_val:.2f})"
+            ),
+            "severity": "critical" if missing_pct > 20 else "warning",
+            "affected_rows_count": missing_count,
+            "parameters": {
+                "method": method,
+                "value": round(impute_val, 4),
+                "missing_pct": round(missing_pct, 2),
+            },
+            "impact_preview": {
+                "sample_before": [None] * min(3, missing_count),
+                "sample_after": [round(impute_val, 2)] * min(3, missing_count),
+                "action": f"Fill missing with {method} = {impute_val:.2f}",
+            },
+        })
+    else:
+        # Categorical: impute with mode
+        non_null = series.dropna()
+        if len(non_null) == 0:
+            return suggestions
+
+        mode_vals = non_null.mode()
+        if len(mode_vals) == 0:
+            return suggestions
+
+        mode_val = str(mode_vals.iloc[0])
+        suggestions.append({
+            "operation_type": "impute_value",
+            "column_name": col_name,
+            "description": (
+                f"Impute {missing_pct:.1f}% missing values in '{col_name}' "
+                f"using mode ('{mode_val}')"
+            ),
+            "severity": "critical" if missing_pct > 20 else "warning",
+            "affected_rows_count": missing_count,
+            "parameters": {
+                "method": "mode",
+                "value": mode_val,
+                "missing_pct": round(missing_pct, 2),
+            },
+            "impact_preview": {
+                "sample_before": [None] * min(3, missing_count),
+                "sample_after": [mode_val] * min(3, missing_count),
+                "action": f"Fill missing with mode = '{mode_val}'",
+            },
+        })
 
     return suggestions
 

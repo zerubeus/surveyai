@@ -298,6 +298,28 @@ def _apply_transform(
             if target_type == "numeric":
                 df[col_name] = pd.to_numeric(df[col_name], errors="coerce")
 
+    elif op_type == "impute_value":
+        if col_name and col_name in df.columns:
+            method = params.get("method", "median")
+            value = params.get("value")
+            mask = df[col_name].isna()
+            if mask.any():
+                if method == "median":
+                    fill = pd.to_numeric(df[col_name], errors="coerce").median()
+                    df.loc[mask, col_name] = fill
+                elif method == "mean":
+                    fill = pd.to_numeric(df[col_name], errors="coerce").mean()
+                    df.loc[mask, col_name] = fill
+                elif method == "mode":
+                    mode_vals = df[col_name].dropna().mode()
+                    if len(mode_vals) > 0:
+                        df.loc[mask, col_name] = mode_vals.iloc[0]
+                elif method == "constant" and value is not None:
+                    df.loc[mask, col_name] = value
+                elif value is not None:
+                    # Fallback: use provided value directly
+                    df.loc[mask, col_name] = value
+
     elif op_type in ("fix_encoding", "fix_skip_logic"):
         pass  # future implementation
 
