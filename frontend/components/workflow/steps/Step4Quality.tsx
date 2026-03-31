@@ -206,7 +206,7 @@ function buildAuditSections(
       severity: "info",
       title: "Columns with Most Missing Data",
       description: colsByMissing
-        .map((c) => `${c.name}: ${(c.missingPct * 100).toFixed(1)}%`)
+        .map((c) => `${c.name}: ${c.missingPct.toFixed(1)}%`)
         .join(" · "),
       recommendation: "Review these columns in the Missing Data section below",
       infoOnly: true,
@@ -289,19 +289,20 @@ function buildAuditSections(
         missingCount: (p?.missing_count as number) ?? 0,
       };
     })
-    .filter((c) => c.missingPct > 0.05)
+    // missing_pct is stored as percentage (0-100) by EDA service
+    .filter((c) => c.missingPct > 5)
     .sort((a, b) => b.missingPct - a.missingPct);
 
   for (const col of colsMissing) {
     const colName = col.result.column_name ?? "unknown";
-    const sev: Severity = col.missingPct > 0.15 ? "critical" : "warning";
+    const sev: Severity = col.missingPct > 15 ? "critical" : "warning";
     missingIssues.push({
       id: `s5-missing-${col.result.id}`,
       severity: sev,
-      title: `${colName} — ${(col.missingPct * 100).toFixed(1)}% missing`,
+      title: `${colName} — ${col.missingPct.toFixed(1)}% missing`,
       columnName: colName,
-      description: `${col.missingCount > 0 ? col.missingCount.toLocaleString() + " values" : (col.missingPct * 100).toFixed(1) + "%"} missing`,
-      recommendation: col.missingPct > 0.15
+      description: `${col.missingCount > 0 ? col.missingCount.toLocaleString() + " values" : col.missingPct.toFixed(1) + "%"} missing`,
+      recommendation: col.missingPct > 15
         ? "Consider imputation or dropping this column"
         : "Impute or flag missing values",
       matchingOpId: findOp(["standardize_missing", "impute_value"], colName),
