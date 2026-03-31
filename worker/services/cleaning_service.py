@@ -22,6 +22,7 @@ import structlog
 
 from db import SupabaseDB
 from services import ai_service
+from services.file_utils import read_dataframe_from_bytes
 
 logger = structlog.get_logger()
 
@@ -271,20 +272,12 @@ def generate_cleaning_suggestions(
 
 
 def _load_dataframe(db: SupabaseDB, dataset: dict[str, Any]) -> pd.DataFrame:
-    """Load dataset from storage into DataFrame."""
+    """Load dataset from storage into DataFrame using the robust file parser."""
     file_path: str = dataset.get("working_file_path") or dataset["original_file_path"]
     bucket = "datasets" if dataset.get("working_file_path") else "uploads"
-    file_type: str = dataset["file_type"]
+    file_type: str = dataset.get("file_type", "csv")
     file_bytes = db.download_file(bucket, file_path)
-    buf = io.BytesIO(file_bytes)
-    if file_type in (
-        "xlsx",
-        "xls",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "application/vnd.ms-excel",
-    ):
-        return pd.read_excel(buf)
-    return pd.read_csv(buf, encoding_errors="replace")
+    return read_dataframe_from_bytes(file_bytes, file_type)
 
 
 def _check_duplicate_rows(
